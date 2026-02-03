@@ -8,12 +8,14 @@ export class ChatHandler {
   private systemPrompt: string;
   private agentName: string;
   private agentAvatar: string;
+  private activeCrew: string[];
   constructor(aiGatewayUrl: string, apiKey: string, model: string, systemPrompt?: string, agentName?: string, agentAvatar?: string) {
     this.client = new OpenAI({ baseURL: aiGatewayUrl, apiKey: apiKey });
     this.model = model;
     this.systemPrompt = systemPrompt || 'You are a helpful AI assistant.';
     this.agentName = agentName || 'Assistant';
     this.agentAvatar = agentAvatar || '🤖';
+    this.activeCrew = []; // Will be updated per request
   }
   async processMessage(message: string, conversationHistory: Message[], onChunk?: (chunk: string) => void): Promise<{ content: string; messages: Message[]; toolCalls?: ToolCall[] }> {
     const messages = this.buildConversationMessages(message, conversationHistory);
@@ -24,7 +26,7 @@ export class ChatHandler {
         messages,
         tools: toolDefinitions,
         tool_choice: 'auto',
-        max_tokens: 16000, // Standardized parameter
+        max_tokens: 16000,
         stream: true,
       });
       return this.handleStreamResponse(stream, message, conversationHistory, onChunk);
@@ -39,7 +41,7 @@ export class ChatHandler {
     });
     return this.handleNonStreamResponse(completion, message, conversationHistory);
   }
-  private async handleStreamResponse(stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>, message: string, history: Message[], onChunk: (chunk: string) => void) {
+  private async handleStreamResponse(stream: AsyncIterable<any>, message: string, history: Message[], onChunk: (chunk: string) => void) {
     let fullContent = '';
     const accToolCalls: ChatCompletionMessageFunctionToolCall[] = [];
     for await (const chunk of stream) {
@@ -98,7 +100,7 @@ export class ChatHandler {
   }
   private async generateToolResponse(userMsg: string, history: Message[], toolCalls: ChatCompletionMessageToolCall[], results: ToolCall[]): Promise<string> {
     const messages: ChatCompletionMessageParam[] = [
-      { role: 'system', content: 'You have received tool results. Summarize them naturally.' },
+      { role: 'system', content: `Summarize the tool results. ${this.buildHandoffDirective()}` },
       ...history.slice(-5).map(m => this.mapMessageToOpenAI(m)),
       { role: 'assistant', content: null, tool_calls: toolCalls },
       ...results.map(tr => ({ role: 'tool' as const, content: JSON.stringify(tr.result), tool_call_id: tr.id }))
@@ -106,8 +108,11 @@ export class ChatHandler {
     const followUp = await this.client.chat.completions.create({ model: this.model, messages, max_tokens: 4000 });
     return followUp.choices[0]?.message?.content || 'Task completed.';
   }
+  private buildHandoffDirective(): string {
+    return `PROTOCOL DIRECTIVE: Monitor your confidence. If a task exceeds your persona "${this.agentName}" or tools fail repeatedly, you MUST suggest a delegate. SIGNAL: "[HANDOFF:AgentName]". Available crew: ${this.activeCrew.join(', ') || 'none'}.`;
+  }
   private buildConversationMessages(userMsg: string, history: Message[]): ChatCompletionMessageParam[] {
-    const identity = `${this.agentName} ${this.agentAvatar}\nSoul: ${this.systemPrompt}`;
+    const identity = `${this.agentName} ${this.agentAvatar}\nSoul: ${this.systemPrompt}\n${this.buildHandoffDirective()}`;
     return [{ role: 'system', content: identity }, ...history.slice(-10).map(m => this.mapMessageToOpenAI(m)), { role: 'user', content: userMsg }];
   }
   private mapMessageToOpenAI(m: Message): ChatCompletionMessageParam {
@@ -120,4 +125,5 @@ export class ChatHandler {
   }
   updateModel(newModel: string): void { this.model = newModel; }
   updatePersona(soul: string, name: string, avatar: string): void { this.systemPrompt = soul; this.agentName = name; this.agentAvatar = avatar; }
+  updateCrew(names: string[]): void { this.activeCrew = names; }
 }

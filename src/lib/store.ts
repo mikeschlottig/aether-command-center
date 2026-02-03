@@ -16,6 +16,11 @@ export interface CustomSkill {
   language: string;
   description: string;
   updatedAt: number;
+  bindings: {
+    kv: string[];
+    d1: string[];
+    ai: boolean;
+  };
 }
 interface AgentStore {
   personas: AgentPersona[];
@@ -35,7 +40,7 @@ const DEFAULT_PERSONAS: AgentPersona[] = [
     description: 'A wise guide for architectural decisions.',
     systemPrompt: 'You are the Aether Sage, a helpful AI focused on software architecture.',
     modelId: 'google-ai-studio/gemini-2.0-flash',
-    avatar: '����‍♂️',
+    avatar: '🧙‍♂���',
     tools: ['get_weather', 'web_search']
   }
 ];
@@ -46,7 +51,8 @@ const INITIAL_SKILLS: CustomSkill[] = [
     language: 'typescript',
     description: 'Standard edge weather fetcher',
     updatedAt: Date.now(),
-    code: `export async function get_weather(location: string) {\n  const endpoint = \`https://api.aether.com/weather/\${location}\`;\n  const response = await fetch(endpoint);\n  if (!response.ok) throw new Error('Cloud obstruction detected.');\n  return await response.json();\n}`
+    code: `export async function get_weather(location: string) {\n  const endpoint = \`https://api.aether.com/weather/\${location}\`;\n  const response = await fetch(endpoint);\n  if (!response.ok) throw new Error('Cloud obstruction detected.');\n  return await response.json();\n}`,
+    bindings: { kv: ['WEATHER_CACHE'], d1: [], ai: false }
   }
 ];
 export const useAgentStore = create<AgentStore>()(
@@ -77,6 +83,6 @@ export const useAgentStore = create<AgentStore>()(
         skills: state.skills.filter(s => s.id !== id)
       })),
     }),
-    { name: 'aether-command-v3-integrity' }
+    { name: 'aether-command-v6-production' }
   )
 );
