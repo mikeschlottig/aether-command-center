@@ -12,6 +12,7 @@ import {
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 const NAV_ITEMS = [
   { name: "Dashboard", icon: Home, path: "/" },
   { name: "Agent Atelier", icon: Palette, path: "/atelier" },
@@ -38,21 +39,19 @@ export function AppSidebar(): JSX.Element {
           <SidebarMenu className="gap-2 px-2">
             {NAV_ITEMS.map((item) => (
               <SidebarMenuItem key={item.path}>
-                <SidebarMenuButton 
-                  asChild 
-                  isActive={location.pathname === item.path}
+                <Link
+                  to={item.path}
                   className={cn(
-                    "h-11 px-4 transition-all duration-200",
-                    location.pathname === item.path 
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-md translate-x-1" 
+                    buttonVariants({ variant: 'ghost' }),
+                    "h-11 px-4 gap-2 items-center justify-start font-medium rounded-md transition-all duration-200 flex shrink-0",
+                    location.pathname === item.path
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-md translate-x-1 [&>svg]:text-primary-foreground"
                       : "hover:bg-accent/50"
                   )}
                 >
-                  <Link to={item.path}>
-                    <item.icon className="h-5 w-5" />
-                    <span className="font-medium">{item.name}</span>
-                  </Link>
-                </SidebarMenuButton>
+                  <item.icon className="h-5 w-5" />
+                  <span className="font-medium">{item.name}</span>
+                </Link>
               </SidebarMenuItem>
             ))}
           </SidebarMenu>

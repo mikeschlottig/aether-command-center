@@ -13,15 +13,16 @@ export function SkillForge() {
   const skills = useAgentStore(s => s.skills);
   const saveSkill = useAgentStore(s => s.saveSkill);
   const deleteSkill = useAgentStore(s => s.deleteSkill);
-  const [activeSkillId, setActiveSkillId] = useState<string | null>(skills[0]?.id || null);
-  const [code, setCode] = useState(skills[0]?.code || '');
+  const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
+  const [code, setCode] = useState('');
   const [isDeploying, setIsDeploying] = useState(false);
   const activeSkill = skills.find(s => s.id === activeSkillId);
+  
   useEffect(() => {
     if (activeSkill) {
       setCode(activeSkill.code);
     }
-  }, [activeSkillId]);
+  }, [activeSkillId, skills]);
   const handleSave = () => {
     if (!activeSkillId) return;
     const currentSkill = skills.find(s => s.id === activeSkillId);
@@ -93,8 +94,11 @@ export function SkillForge() {
                     className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive"
                     onClick={(e) => {
                       e.stopPropagation();
+                      const wasActive = activeSkillId === skill.id;
                       deleteSkill(skill.id);
-                      if (activeSkillId === skill.id) setActiveSkillId(skills[0].id);
+                      if (wasActive && skills.length === 1) {
+                        setActiveSkillId(null);
+                      }
                     }}
                   >
                     <Trash2 className="h-3 w-3" />

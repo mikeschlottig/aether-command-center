@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { buttonVariants } from '@/components/ui/button';
 export function HomePage() {
   const personas = useAgentStore((s) => s.personas);
   const skills = useAgentStore((s) => s.skills);
@@ -20,12 +21,13 @@ export function HomePage() {
             title="Command Center"
             description="Orchestrate your fleet of digital personas and monitor their activities from a single high-vantage point."
           />
-          <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg px-6 py-6 h-auto text-lg rounded-2xl group">
-            <Link to="/atelier" className="flex items-center gap-3">
-              <Plus className="h-5 w-5 group-hover:rotate-90 transition-transform" />
-              Manifest Agent
-            </Link>
-          </Button>
+          <Link
+            to="/atelier"
+            className={cn(buttonVariants({variant: 'default'}), 'shadow-lg px-6 py-6 h-auto text-lg rounded-2xl group flex items-center gap-3')}
+          >
+            <Plus className="h-5 w-5 group-hover:rotate-90 transition-transform" />
+            Manifest Agent
+          </Link>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="card-illustrative border-primary/20 bg-primary/5 relative overflow-hidden group">
@@ -93,13 +95,13 @@ export function HomePage() {
                       ))}
                     </div>
                   </div>
-                  <Button
-                    className="w-full mt-4 bg-background border-2 border-primary/10 text-primary hover:bg-primary hover:text-primary-foreground font-bold rounded-xl transition-all h-12"
+                  <Link
+                    to="/deck"
+                    className="w-full mt-4 bg-background border-2 border-primary/10 text-primary hover:bg-primary hover:text-primary-foreground font-bold rounded-xl transition-all h-12 flex items-center justify-center shadow-sm hover:shadow-md"
                     onClick={() => setActivePersona(persona.id)}
-                    asChild
                   >
-                    <Link to="/deck">Summon to Deck</Link>
-                  </Button>
+                    Summon to Deck
+                  </Link>
                 </CardContent>
               </Card>
             ))}
