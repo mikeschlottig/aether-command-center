@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, User, Loader2, Eraser, Sparkles, MessageCircle } from 'lucide-react';
-import { useAgentStore, AgentPersona } from '@/lib/store';
+import { Send, User, Loader2, Eraser, MessageCircle } from 'lucide-react';
+import { useAgentStore } from '@/lib/store';
 import { PageHeader } from '@/components/illustrative/PageHeader';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -16,9 +16,9 @@ import { cn } from '@/lib/utils';
 import { ToolOutput } from '@/components/illustrative/ToolOutput';
 import { HandoffProtocol } from '@/components/illustrative/HandoffProtocol';
 export function CommandDeck() {
-  const personas = useAgentStore((s) => s.personas);
-  const activeId = useAgentStore((s) => s.activePersonaId);
-  const setActiveId = useAgentStore((s) => s.setActivePersona);
+  const personas = useAgentStore(s => s.personas);
+  const activeId = useAgentStore(s => s.activePersonaId);
+  const setActiveId = useAgentStore(s => s.setActivePersona);
   const activePersona = personas.find(p => p.id === activeId) || personas[0];
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -46,11 +46,11 @@ export function CommandDeck() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, streamingMessage]);
-  const handleAgentHandoff = async (agent: AgentPersona) => {
+  const handleAgentHandoff = async (agent: any) => {
     setActiveId(agent.id);
     await chatService.updatePersona(agent.name, agent.avatar, agent.systemPrompt);
     toast.success(`Authority Transferred`, { description: `${agent.name} is now in command.` });
-    setInput(`Hello ${agent.name}, I've been referred to you for your specialized expertise. How can you help me with the current task?`);
+    setInput(`Hello ${agent.name}, I've been referred to you for your specialized expertise.`);
   };
   const handleSendMessage = async () => {
     if (!input.trim() || isProcessing) return;
@@ -84,7 +84,6 @@ export function CommandDeck() {
       }
     } catch (err) {
       toast.error("Aether Link Failed");
-      console.error(err);
     } finally {
       setIsProcessing(false);
       setStreamingMessage('');
@@ -95,13 +94,15 @@ export function CommandDeck() {
     setStreamingMessage('');
     chatService.clearMessages();
   };
+  // Filter out system and tool messages to keep the UI clean
+  const visibleMessages = messages.filter(m => m.role === 'user' || m.role === 'assistant');
   return (
     <AppLayout className="flex flex-col h-screen overflow-hidden">
-      <div className="flex-1 flex flex-col p-6 max-w-5xl mx-auto w-full">
-        <div className="flex items-center justify-between mb-6">
+      <div className="flex-1 flex flex-col p-6 max-w-5xl mx-auto w-full overflow-hidden">
+        <div className="flex items-center justify-between mb-6 shrink-0">
           <PageHeader title="Command Deck" className="mb-0" />
           <div className="flex items-center gap-3">
-            <Select value={activeId || ''} onValueChange={setActiveId}>
+            <Select value={activeId || ''} onValueChange={(val) => setActiveId(val)}>
               <SelectTrigger className="w-[220px] bg-background card-illustrative border-primary/20">
                 <SelectValue placeholder="Select Agent" />
               </SelectTrigger>
@@ -119,7 +120,7 @@ export function CommandDeck() {
         <Card className="flex-1 flex flex-col overflow-hidden card-illustrative border-primary/20 bg-background/50 backdrop-blur-sm relative">
           <ScrollArea className="flex-1 p-6">
             <div className="space-y-8">
-              {messages.length === 0 && !streamingMessage && (
+              {visibleMessages.length === 0 && !streamingMessage && (
                 <div className="flex flex-col items-center justify-center py-24 text-center space-y-4">
                   <div className="h-20 w-20 rounded-3xl bg-primary/5 flex items-center justify-center text-5xl shadow-inner border-2 border-dashed border-primary/20">
                     {activePersona.avatar}
@@ -131,7 +132,7 @@ export function CommandDeck() {
                 </div>
               )}
               <AnimatePresence initial={false}>
-                {messages.map((m) => (
+                {visibleMessages.map((m) => (
                   <motion.div
                     key={m.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -164,10 +165,10 @@ export function CommandDeck() {
                         <div className="mt-2">
                           {(() => {
                             const match = m.content.match(/\[HANDOFF:\s*(.*?)\]/);
-                            const suggestedName = match ? match[1].trim() : null;
-                            const suggestedAgent = personas.find(p => p.name.toLowerCase().includes(suggestedName?.toLowerCase() || ''));
-                            if (suggestedAgent && suggestedAgent.id !== activeId) {
-                              return <HandoffProtocol suggestedAgent={suggestedAgent} onAccept={handleAgentHandoff} />;
+                            const name = match ? match[1].trim() : '';
+                            const agent = personas.find(p => p.name.toLowerCase().includes(name.toLowerCase()));
+                            if (agent && agent.id !== activeId) {
+                              return <HandoffProtocol suggestedAgent={agent} onAccept={handleAgentHandoff} />;
                             }
                             return null;
                           })()}
@@ -191,7 +192,7 @@ export function CommandDeck() {
                 </motion.div>
               )}
               {isProcessing && !streamingMessage && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-4">
+                <div className="flex gap-4">
                   <div className="h-10 w-10 rounded-xl bg-accent border border-accent flex items-center justify-center shrink-0">
                     <Loader2 className="h-5 w-5 animate-spin text-primary" />
                   </div>
@@ -202,12 +203,12 @@ export function CommandDeck() {
                       <div className="h-2 w-2 rounded-full bg-primary/80 animate-bounce [animation-delay:0.4s]" />
                     </div>
                   </div>
-                </motion.div>
+                </div>
               )}
               <div ref={scrollRef} />
             </div>
           </ScrollArea>
-          <div className="p-4 border-t bg-background/50 backdrop-blur-md">
+          <div className="p-4 border-t bg-background/50 backdrop-blur-md shrink-0">
             <div className="flex gap-3 max-w-4xl mx-auto items-end">
               <div className="flex-1 relative">
                 <Input
