@@ -1,0 +1,36 @@
+Phase 10 Investigation Report — Missing Pages + Routing Compliance (prompts/usage.md lines 102–110)
+Summary
+The previous phase did not implement the four requested pages and routes: Tool Forge (/tool-forge), MCP Forge (/mcp-forge), Agent Job Board (/job-board), and Agent Learning Center (/learning-center). It also did not follow the routing instruction in prompts/usage.md lines 102–110 that requires adding createBrowserRouter entries with errorElement: <RouteErrorBoundary /> for new routes.
+Timeline (what was attempted vs. what was skipped)
+1) Work performed
+- Focused on stabilizing existing flows (Dashboard/Home, Agent Atelier, Command Deck, Skill Forge).
+- Implemented improvements related to chat streaming reliability, tool-call persistence handling, and UI polish.
+- Added/updated helper UI components (e.g., ToolOutput, HandoffProtocol, WranglerConsole usage in Skill Forge) and session list display on Home.
+2) Work skipped
+- The four new pages were not created.
+- The four new routes were not added to src/main.tsx using createBrowserRouter with errorElement: <RouteErrorBoundary /> per prompts/usage.md lines 102–110.
+- The AppSidebar navigation was not updated to include the four new destinations, reducing discoverability.
+- Persisted client state was not expanded to include new page data with safe default hydration, so there was no forward-compatible store slice for the new features.
+Root cause analysis (factual)
+- Verification failure: the implementation did not include a final checklist step to confirm requested routes existed in src/main.tsx and were reachable by navigation.
+- Scope drift: effort was allocated to improving existing pages and backend/streaming behavior rather than completing the explicit page-and-route deliverables.
+- Incomplete compliance check: prompts/usage.md routing rules (lines 102–110) were not treated as a non-negotiable acceptance criterion for phase completion.
+Concrete prevention steps (process changes)
+1) Pre-flight “Route Matrix” checklist before declaring a phase complete:
+- Confirm each requested path exists in src/main.tsx as a createBrowserRouter entry.
+- Confirm each route has errorElement: <RouteErrorBoundary />.
+- Confirm each page component exists and renders without runtime errors.
+2) Navigation coverage checklist:
+- Confirm AppSidebar contains links to each requested route.
+- Confirm active-state highlighting works on location.pathname equality for each new entry.
+3) Layout compliance checklist:
+- Confirm each new page uses <AppLayout container> (max-w-7xl gutters + py-8/10/12 spacing) and includes a PageHeader.
+4) Persistence/migration checklist:
+- Confirm new store slices hydrate safely with defaults when older localStorage entries are present.
+- Confirm the persist key remains unchanged to preserve personas/skills and existing local data.
+5) Manual preview validation steps:
+- Navigate to each new route from the sidebar.
+- Refresh the page on each route to validate router config and hydration.
+- Create/edit/toggle items on each new page to validate persistence and non-destructive behavior.
+Outcome for this phase (Phase 10)
+The four requested pages and routes are now implemented, wired into createBrowserRouter and AppSidebar, and the Zustand store includes safe persisted defaults with migration notes while preserving existing personas/skills data.
