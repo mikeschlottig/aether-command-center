@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
-import { Save, Sparkles, User, Brain, ScrollText, PenTool } from 'lucide-react';
+import { Save, User, Brain, ScrollText, PenTool, Sparkles } from 'lucide-react';
 import { useAgentStore } from '@/lib/store';
 import { PageHeader } from '@/components/illustrative/PageHeader';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { MODELS } from '@/lib/chat';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 const AVATARS = ['🤖', '🧙‍♂️', '🧚', '🦸‍♂️', '👩‍💻', '👨‍🔬', '🦉', '🦊', '🦁'];
 const AVAILABLE_TOOLS = [
   { id: 'get_weather', name: 'Weather Watcher', desc: 'Real-time weather data' },
@@ -43,8 +44,8 @@ export function AgentAtelier() {
   };
   return (
     <AppLayout container>
-      <PageHeader 
-        title="Agent Atelier" 
+      <PageHeader
+        title="Agent Atelier"
         description="Craft the identity, cognition, and capabilities of your digital workers."
       />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 mt-10">
@@ -57,9 +58,9 @@ export function AgentAtelier() {
             <div className="grid gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Agent Name</Label>
-                <Input 
-                  id="name" 
-                  placeholder="e.g. Architect-1" 
+                <Input
+                  id="name"
+                  placeholder="e.g. Architect-1"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="bg-background"
@@ -67,9 +68,9 @@ export function AgentAtelier() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="description">Brief Purpose</Label>
-                <Input 
-                  id="description" 
-                  placeholder="e.g. Master of distributed systems" 
+                <Input
+                  id="description"
+                  placeholder="e.g. Master of distributed systems"
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   className="bg-background"
@@ -85,8 +86,8 @@ export function AgentAtelier() {
             <div className="grid gap-4">
               <div className="space-y-2">
                 <Label>Brain Model</Label>
-                <Select 
-                  value={form.modelId} 
+                <Select
+                  value={form.modelId}
                   onValueChange={(val) => setForm({ ...form, modelId: val })}
                 >
                   <SelectTrigger className="bg-background">
@@ -101,9 +102,9 @@ export function AgentAtelier() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="soul">Soul (System Prompt)</Label>
-                <Textarea 
-                  id="soul" 
-                  placeholder="Define their personality, constraints, and expertise..." 
+                <Textarea
+                  id="soul"
+                  placeholder="Define their personality, constraints, and expertise..."
                   className="min-h-[200px] bg-background"
                   value={form.systemPrompt}
                   onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
@@ -119,8 +120,8 @@ export function AgentAtelier() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {AVAILABLE_TOOLS.map((tool) => (
                 <div key={tool.id} className="flex items-start space-x-3 p-4 rounded-xl border bg-card">
-                  <Checkbox 
-                    id={tool.id} 
+                  <Checkbox
+                    id={tool.id}
                     checked={form.tools.includes(tool.id)}
                     onCheckedChange={(checked) => {
                       if (checked) setForm({ ...form, tools: [...form.tools, tool.id] });
@@ -139,7 +140,7 @@ export function AgentAtelier() {
           </div>
           <div className="pt-6 flex justify-end gap-4">
             <Button variant="ghost" onClick={() => navigate('/')}>Cancel</Button>
-            <Button className="btn-gradient min-w-[140px]" onClick={handleSave}>
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg min-w-[140px]" onClick={handleSave}>
               <Save className="mr-2 h-4 w-4" />
               Manifest
             </Button>
@@ -152,11 +153,12 @@ export function AgentAtelier() {
               {AVATARS.map(av => (
                 <button
                   key={av}
+                  type="button"
                   onClick={() => setForm({ ...form, avatar: av })}
                   className={cn(
                     "h-16 rounded-2xl flex items-center justify-center text-3xl transition-all",
-                    form.avatar === av 
-                      ? "bg-primary text-white scale-110 shadow-lg" 
+                    form.avatar === av
+                      ? "bg-primary text-white scale-110 shadow-lg"
                       : "bg-background border-2 border-transparent hover:border-primary/20"
                   )}
                 >

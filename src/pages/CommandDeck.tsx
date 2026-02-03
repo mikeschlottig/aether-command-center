@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Sparkles, User, Bot, Loader2, RefreshCcw, Eraser } from 'lucide-react';
+import { Send, User, Loader2, Eraser, Sparkles, MessageCircle } from 'lucide-react';
 import { useAgentStore } from '@/lib/store';
 import { PageHeader } from '@/components/illustrative/PageHeader';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -7,10 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card } from '@/components/ui/card';
 import { chatService } from '@/lib/chat';
-import { Message } from '../../worker/types';
+import { Message, ToolCall } from '../../worker/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { ToolOutput } from '@/components/illustrative/ToolOutput';
 export function CommandDeck() {
   const personas = useAgentStore((s) => s.personas);
   const activeId = useAgentStore((s) => s.activePersonaId);
@@ -18,17 +21,21 @@ export function CommandDeck() {
   const activePersona = personas.find(p => p.id === activeId) || personas[0];
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [streamingMessage, setStreamingMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
+  const scrollToBottom = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages]);
+  };
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, streamingMessage]);
   const handleSendMessage = async () => {
     if (!input.trim() || isProcessing) return;
     const userMsg: Message = {
-      id: Date.now().toString(),
+      id: `u-${Date.now()}`,
       role: 'user',
       content: input,
       timestamp: Date.now()
@@ -36,34 +43,48 @@ export function CommandDeck() {
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsProcessing(true);
+    setStreamingMessage('');
     try {
-      const response = await chatService.sendMessage(input, activePersona.modelId);
-      if (response.success && response.data) {
-        setMessages(response.data.messages);
+      const response = await chatService.sendMessage(
+        input, 
+        activePersona.modelId,
+        (chunk) => {
+          setStreamingMessage(prev => prev + chunk);
+        }
+      );
+      if (response.success) {
+        // After streaming finishes or if non-streaming, sync full message list
+        const latest = await chatService.getMessages();
+        if (latest.success && latest.data) {
+          setMessages(latest.data.messages);
+        }
       } else if (response.error) {
         toast.error("Transmission Error", { description: response.error });
       }
     } catch (err) {
       toast.error("Aether Link Failed");
+      console.error(err);
     } finally {
       setIsProcessing(false);
+      setStreamingMessage('');
     }
   };
   const clearChat = () => {
     setMessages([]);
+    setStreamingMessage('');
     chatService.clearMessages();
   };
   return (
     <AppLayout className="flex flex-col h-screen overflow-hidden">
       <div className="flex-1 flex flex-col p-6 max-w-5xl mx-auto w-full">
         <div className="flex items-center justify-between mb-6">
-          <PageHeader 
-            title="Command Deck" 
+          <PageHeader
+            title="Command Deck"
             className="mb-0"
           />
           <div className="flex items-center gap-3">
             <Select value={activeId || ''} onValueChange={setActiveId}>
-              <SelectTrigger className="w-[200px] bg-background">
+              <SelectTrigger className="w-[220px] bg-background card-illustrative border-primary/20">
                 <SelectValue placeholder="Select Agent" />
               </SelectTrigger>
               <SelectContent>
@@ -72,23 +93,23 @@ export function CommandDeck() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" size="icon" onClick={clearChat}>
+            <Button variant="outline" size="icon" onClick={clearChat} className="card-illustrative border-destructive/20 hover:bg-destructive/10">
               <Eraser className="h-4 w-4" />
             </Button>
           </div>
         </div>
         <Card className="flex-1 flex flex-col overflow-hidden card-illustrative border-primary/20 bg-background/50 backdrop-blur-sm relative">
           <ScrollArea className="flex-1 p-6">
-            <div className="space-y-6">
-              {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
-                  <div className="h-16 w-16 rounded-3xl bg-primary/5 flex items-center justify-center text-4xl">
+            <div className="space-y-8">
+              {messages.length === 0 && !streamingMessage && (
+                <div className="flex flex-col items-center justify-center py-24 text-center space-y-4">
+                  <div className="h-20 w-20 rounded-3xl bg-primary/5 flex items-center justify-center text-5xl shadow-inner border-2 border-dashed border-primary/20">
                     {activePersona.avatar}
                   </div>
                   <div className="space-y-2">
-                    <h3 className="font-serif font-bold text-2xl">Awaiting Command</h3>
-                    <p className="text-muted-foreground max-w-xs">
-                      {activePersona.name} is ready for deployment.
+                    <h3 className="font-serif font-bold text-2xl">Awaiting Directives</h3>
+                    <p className="text-muted-foreground max-w-sm italic">
+                      "{activePersona.description}"
                     </p>
                   </div>
                 </div>
@@ -105,29 +126,51 @@ export function CommandDeck() {
                     )}
                   >
                     <div className={cn(
-                      "h-10 w-10 rounded-xl flex items-center justify-center text-xl shrink-0 shadow-sm",
-                      m.role === 'user' ? "bg-primary text-white" : "bg-accent"
+                      "h-10 w-10 rounded-xl flex items-center justify-center text-xl shrink-0 shadow-sm border",
+                      m.role === 'user' ? "bg-primary text-white border-primary" : "bg-accent border-accent"
                     )}>
                       {m.role === 'user' ? <User className="h-5 w-5" /> : activePersona.avatar}
                     </div>
-                    <div className={cn(
-                      "max-w-[80%] rounded-2xl px-5 py-3 shadow-sm",
-                      m.role === 'user' 
-                        ? "bg-primary text-primary-foreground rounded-tr-none" 
-                        : "bg-white dark:bg-card border-2 border-primary/10 rounded-tl-none"
-                    )}>
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                    <div className="flex flex-col gap-3 max-w-[85%]">
+                      <div className={cn(
+                        "rounded-2xl px-5 py-4 shadow-sm relative",
+                        m.role === 'user'
+                          ? "bg-primary text-primary-foreground rounded-tr-none"
+                          : "bg-white dark:bg-card border-2 border-primary/10 rounded-tl-none"
+                      )}>
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                      </div>
+                      {m.toolCalls && m.toolCalls.length > 0 && (
+                        <div className="space-y-2">
+                          {m.toolCalls.map((tc: ToolCall) => (
+                            <ToolOutput key={tc.id} toolCall={tc} />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 ))}
               </AnimatePresence>
-              {isProcessing && (
+              {streamingMessage && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-4">
-                  <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center text-xl shrink-0">
+                  <div className="h-10 w-10 rounded-xl bg-accent border border-accent flex items-center justify-center text-xl shrink-0">
+                    {activePersona.avatar}
+                  </div>
+                  <div className="bg-white dark:bg-card border-2 border-primary/10 rounded-2xl rounded-tl-none px-5 py-4 shadow-sm max-w-[85%]">
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{streamingMessage}</p>
+                    <div className="flex gap-1.5 mt-2">
+                      <div className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-pulse" />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+              {isProcessing && !streamingMessage && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-4">
+                  <div className="h-10 w-10 rounded-xl bg-accent border border-accent flex items-center justify-center shrink-0">
                     <Loader2 className="h-5 w-5 animate-spin text-primary" />
                   </div>
-                  <div className="bg-white dark:bg-card border-2 border-primary/10 rounded-2xl rounded-tl-none px-5 py-3 shadow-sm">
-                    <div className="flex gap-1.5 pt-2">
+                  <div className="bg-white dark:bg-card border-2 border-primary/10 rounded-2xl rounded-tl-none px-5 py-4 shadow-sm">
+                    <div className="flex gap-1.5">
                       <div className="h-2 w-2 rounded-full bg-primary/40 animate-bounce" />
                       <div className="h-2 w-2 rounded-full bg-primary/60 animate-bounce [animation-delay:0.2s]" />
                       <div className="h-2 w-2 rounded-full bg-primary/80 animate-bounce [animation-delay:0.4s]" />
@@ -139,36 +182,36 @@ export function CommandDeck() {
             </div>
           </ScrollArea>
           <div className="p-4 border-t bg-background/50 backdrop-blur-md">
-            <div className="flex gap-2 max-w-4xl mx-auto">
-              <Input
-                placeholder={`Message ${activePersona.name}...`}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                className="h-12 bg-background border-2 border-primary/10 focus-visible:ring-primary shadow-inner"
-              />
-              <Button 
-                onClick={handleSendMessage} 
+            <div className="flex gap-3 max-w-4xl mx-auto items-end">
+              <div className="flex-1 relative">
+                <Input
+                  placeholder={`Command ${activePersona.name}...`}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                  className="h-14 bg-background border-2 border-primary/10 focus-visible:ring-primary shadow-inner rounded-2xl pr-12"
+                />
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-30">
+                  <MessageCircle className="h-5 w-5" />
+                </div>
+              </div>
+              <Button
+                onClick={handleSendMessage}
                 disabled={isProcessing}
-                className="h-12 w-12 rounded-xl btn-gradient shrink-0"
+                className="h-14 w-14 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shrink-0 flex items-center justify-center"
               >
-                <Send className="h-5 w-5" />
+                <Send className="h-6 w-6" />
               </Button>
             </div>
-            <p className="text-[10px] text-center mt-3 text-muted-foreground uppercase tracking-widest font-bold">
-              Cognition provided by {activePersona.modelId.split('/').pop()}
-            </p>
+            <div className="flex items-center justify-center gap-2 mt-4">
+               <Sparkles className="h-3 w-3 text-primary animate-pulse" />
+               <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60">
+                 Core Engine: {activePersona.modelId.split('/').pop()}
+               </p>
+            </div>
           </div>
         </Card>
       </div>
     </AppLayout>
   );
-}
-// Utility function to merge classes locally if not imported
-function cn(...inputs: any[]) {
-  return inputs.filter(Boolean).join(' ');
-}
-// Inline Card component since we're in a single file cat block
-function Card({ children, className }: { children: React.ReactNode, className?: string }) {
-  return <div className={cn("rounded-xl border bg-card text-card-foreground shadow", className)}>{children}</div>;
 }
