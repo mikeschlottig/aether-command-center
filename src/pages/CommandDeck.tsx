@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ToolOutput } from '@/components/illustrative/ToolOutput';
+import { HandoffProtocol } from '@/components/illustrative/HandoffProtocol';
 export function CommandDeck() {
   const personas = useAgentStore((s) => s.personas);
   const activeId = useAgentStore((s) => s.activePersonaId);
@@ -30,10 +31,38 @@ export function CommandDeck() {
     }
   };
   useEffect(() => {
+    const syncSession = async () => {
+      const latest = await chatService.getMessages();
+      if (latest.success && latest.data) {
+        setMessages(latest.data.messages);
+        // Ensure the backend persona is matched if we have one in state
+        const persona = personas.find(p => p.id === activeId);
+        if (persona) {
+          await chatService.updatePersona(persona.name, persona.avatar, persona.systemPrompt);
+        }
+      }
+    };
+    syncSession();
+  }, []);
+  useEffect(() => {
     scrollToBottom();
   }, [messages, streamingMessage]);
+
+  const handleAgentHandoff = async (agent: AgentPersona) => {
+    setActiveId(agent.id);
+    await chatService.updatePersona(agent.name, agent.avatar, agent.systemPrompt);
+    toast.success(`Authority Transferred`, { description: `${agent.name} is now in command.` });
+    
+    // Send a trigger message to the new agent
+    setInput(`Hello ${agent.name}, I've been referred to you for your specialized expertise. How can you help me with the current task?`);
+  };
+
   const handleSendMessage = async () => {
     if (!input.trim() || isProcessing) return;
+    const persona = personas.find(p => p.id === activeId) || personas[0];
+    // Ensure persona is synced before first message
+    await chatService.updatePersona(persona.name, persona.avatar, persona.systemPrompt);
+
     const userMsg: Message = {
       id: `u-${Date.now()}`,
       role: 'user',
@@ -114,6 +143,7 @@ export function CommandDeck() {
                   </div>
                 </div>
               )}
+              
               <AnimatePresence initial={false}>
                 {messages.map((m) => (
                   <motion.div
@@ -140,11 +170,27 @@ export function CommandDeck() {
                       )}>
                         <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
                       </div>
+                      
                       {m.toolCalls && m.toolCalls.length > 0 && (
                         <div className="space-y-2">
                           {m.toolCalls.map((tc: ToolCall) => (
                             <ToolOutput key={tc.id} toolCall={tc} />
                           ))}
+                        </div>
+                      )}
+
+                      {m.role === 'assistant' && m.content.includes('[HANDOFF:') && (
+                        <div className="mt-2">
+                          {(() => {
+                            const match = m.content.match(/\[HANDOFF:\s*(.*?)\]/);
+                            const suggestedName = match ? match[1].trim() : null;
+                            const suggestedAgent = personas.find(p => p.name.toLowerCase().includes(suggestedName?.toLowerCase() || ''));
+                            
+                            if (suggestedAgent && suggestedAgent.id !== activeId) {
+                              return <HandoffProtocol suggestedAgent={suggestedAgent} onAccept={handleAgentHandoff} />;
+                            }
+                            return null;
+                          })()}
                         </div>
                       )}
                     </div>

@@ -13,15 +13,26 @@ export class ChatHandler {
   private client: OpenAI;
   private model: string;
 
-  constructor(aiGatewayUrl: string, apiKey: string, model: string) {
+  private systemPrompt: string;
+  private agentName: string;
+  private agentAvatar: string;
+  constructor(
+    aiGatewayUrl: string, 
+    apiKey: string, 
+    model: string, 
+    systemPrompt?: string, 
+    agentName?: string, 
+    agentAvatar?: string
+  ) {
     this.client = new OpenAI({ 
       baseURL: aiGatewayUrl,
-      apiKey: apiKey
-    });
+      apiKey: apiKey    });
     console.log("BASE URL", aiGatewayUrl);
     this.model = model;
+    this.systemPrompt = systemPrompt || 'You are a helpful AI assistant.';
+    this.agentName = agentName || 'Assistant';
+    this.agentAvatar = agentAvatar || '🤖';
   }
-
   /**
    * Process a user message and generate AI response with optional tool usage
    */
@@ -213,13 +224,19 @@ export class ChatHandler {
    * Build conversation messages for OpenAI API
    */
   private buildConversationMessages(userMessage: string, history: Message[]) {
+    const fullSystemPrompt = `${this.systemPrompt}\n\n` +
+      `Your current identity: ${this.agentName} (${this.agentAvatar})\n` +
+      `HANDOFF PROTOCOL: If you encounter a task outside your expertise or if the user asks for a different specialist, ` +
+      `suggest a peer using the format: [HANDOFF: Agent Name]. Only do this when truly reaching a limitation. ` +
+      `Available peers might include: Coder Bot, Aether Sage, Architect, or other manifesting agents.`;
+
     return [
-      { 
-        role: 'system' as const, 
-        content: 'You are a helpful AI assistant that helps users build and deploy web applications. You provide clear, concise guidance on development, deployment, and troubleshooting. Keep responses practical and actionable.' 
+      {
+        role: 'system' as const,
+        content: fullSystemPrompt
       },
-      ...history.slice(-5).map(m => ({ 
-        role: m.role, 
+      ...history.slice(-5).map(m => ({
+        role: m.role,
         content: m.content 
       })),
       { role: 'user' as const, content: userMessage }
@@ -231,5 +248,14 @@ export class ChatHandler {
    */
   updateModel(newModel: string): void {
     this.model = newModel;
+  }
+
+  /**
+   * Update the persona for this chat handler
+   */
+  updatePersona(systemPrompt: string, name: string, avatar: string): void {
+    this.systemPrompt = systemPrompt;
+    this.agentName = name;
+    this.agentAvatar = avatar;
   }
 }

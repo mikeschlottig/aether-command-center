@@ -9,10 +9,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
+import { chatService } from '@/lib/chat';
+import { SessionInfo } from '../../worker/types';
+import { formatDistanceToNow } from 'date-fns';
 export function HomePage() {
   const personas = useAgentStore((s) => s.personas);
   const skills = useAgentStore((s) => s.skills);
   const setActivePersona = useAgentStore((s) => s.setActivePersona);
+  const [recentSessions, setRecentSessions] = React.useState<SessionInfo[]>([]);
+
+  React.useEffect(() => {
+    chatService.listSessions().then(res => {
+      if (res.success && res.data) {
+        setRecentSessions(res.data.slice(0, 3));
+      }
+    });
+  }, []);
+
   return (
     <AppLayout container>
       <div className="space-y-12">
@@ -116,6 +129,44 @@ export function HomePage() {
             </Link>
           </div>
         </section>
+
+        {recentSessions.length > 0 && (
+          <section className="space-y-6">
+            <div className="flex items-center justify-between border-b pb-4">
+              <h2 className="text-3xl font-serif font-bold">Recent Chronicles</h2>
+            </div>
+            <div className="grid grid-cols-1 gap-4">
+              {recentSessions.map((session) => (
+                <Card key={session.id} className="card-illustrative bg-card hover:bg-accent/5 transition-colors group">
+                  <CardContent className="p-5 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-xl bg-primary/5 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                        <MessageSquare className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-base line-clamp-1">{session.title}</h4>
+                        <p className="text-xs text-muted-foreground font-medium">
+                          Active {formatDistanceToNow(session.lastActive)} ago
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      to="/deck"
+                      onClick={() => {
+                        chatService.switchSession(session.id);
+                        // Attempt to find a matching persona for the active session if stored in state (future)
+                      }}
+                      className={cn(buttonVariants({ variant: 'outline' }), "rounded-xl border-primary/20 hover:border-primary/40 font-bold group-hover:bg-primary group-hover:text-primary-foreground")}
+                    >
+                      Re-enter
+                    </Link>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
+
         <footer className="pt-16 pb-8 border-t text-center space-y-4">
           <div className="flex items-center justify-center gap-2">
             <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />

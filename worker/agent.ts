@@ -14,23 +14,25 @@ export class ChatAgent extends Agent<Env, ChatState> {
   private chatHandler?: ChatHandler;
 
   // Initial state for new chat sessions
-  initialState: ChatState = {
-    messages: [],
+  initialState: ChatState = {    messages: [],
     sessionId: crypto.randomUUID(),
     isProcessing: false,
-    model: 'google-ai-studio/gemini-2.5-flash'
+    model: 'google-ai-studio/gemini-2.0-flash',
+    systemPrompt: 'You are a helpful assistant.',
+    agentName: 'Assistant',
+    agentAvatar: '🤖'
   };
-
   /**
    * Initialize chat handler when agent starts
    */
-  async onStart(): Promise<void> {
-    this.chatHandler = new ChatHandler(
+  async onStart(): Promise<void> {    this.chatHandler = new ChatHandler(
       this.env.CF_AI_BASE_URL ,
       this.env.CF_AI_API_KEY,
-      this.state.model
+      this.state.model,
+      this.state.systemPrompt,
+      this.state.agentName,
+      this.state.agentAvatar
     );
-    
     console.log(`ChatAgent ${this.name} initialized with session ${this.state.sessionId}`);
   }
 
@@ -58,6 +60,10 @@ export class ChatAgent extends Agent<Env, ChatState> {
       if (method === 'POST' && url.pathname === '/model') {
         return this.handleModelUpdate(await request.json());
       }
+      if (method === 'POST' && url.pathname === '/persona') {
+        return this.handlePersonaUpdate(await request.json());
+      }
+
       
       return Response.json({ 
         success: false, 
@@ -236,9 +242,30 @@ export class ChatAgent extends Agent<Env, ChatState> {
     this.setState({ ...this.state, model });
     this.chatHandler?.updateModel(model);
     
-    return Response.json({ 
-      success: true, 
-      data: this.state 
+    return Response.json({
+      success: true,
+      data: this.state
+    });
+  }
+
+  /**
+   * Update persona details (name, avatar, soul)
+   */
+  private handlePersonaUpdate(body: { name: string; avatar: string; systemPrompt: string }): Response {
+    const { name, avatar, systemPrompt } = body;
+    
+    this.setState({
+      ...this.state,
+      agentName: name,
+      agentAvatar: avatar,
+      systemPrompt: systemPrompt
+    });
+    
+    this.chatHandler?.updatePersona(systemPrompt, name, avatar);
+
+    return Response.json({
+      success: true,
+      data: this.state
     });
   }
 }

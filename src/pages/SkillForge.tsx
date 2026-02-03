@@ -17,18 +17,15 @@ export function SkillForge() {
   const [code, setCode] = useState('');
   const [isDeploying, setIsDeploying] = useState(false);
   const activeSkill = skills.find(s => s.id === activeSkillId);
-  
   useEffect(() => {
     if (activeSkill) {
       setCode(activeSkill.code);
     }
-  }, [activeSkillId, skills]);
+  }, [activeSkillId, activeSkill]);
   const handleSave = () => {
-    if (!activeSkillId) return;
-    const currentSkill = skills.find(s => s.id === activeSkillId);
-    if (!currentSkill) return;
+    if (!activeSkillId || !activeSkill) return;
     saveSkill({
-      ...currentSkill,
+      ...activeSkill,
       code,
     });
     toast.success("Script Saved Locally");
@@ -96,7 +93,7 @@ export function SkillForge() {
                       e.stopPropagation();
                       const wasActive = activeSkillId === skill.id;
                       deleteSkill(skill.id);
-                      if (wasActive && skills.length === 1) {
+                      if (wasActive) {
                         setActiveSkillId(null);
                       }
                     }}
@@ -147,9 +144,9 @@ export function SkillForge() {
             </div>
             <div className="flex gap-3">
               <Button variant="outline" onClick={handleSave}>Save Locally</Button>
-              <Button 
+              <Button
                 onClick={handleDeploy}
-                disabled={isDeploying || !activeSkillId} 
+                disabled={isDeploying || !activeSkillId}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg relative overflow-hidden"
               >
                 {isDeploying ? (

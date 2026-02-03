@@ -183,12 +183,29 @@ class ChatService {
       
       return await response.json();
     } catch (error) {
-      console.error('Failed to update model:', error);
-      return { success: false, error: 'Failed to update model' };
+      console.error('Failed to update model:', error);      return { success: false, error: 'Failed to update model' };
+    }
+  }
+
+  async updatePersona(name: string, avatar: string, systemPrompt: string): Promise<ChatResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/persona`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, avatar, systemPrompt })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to update persona:', error);
+      return { success: false, error: 'Failed to update persona' };
     }
   }
 }
-
 export const chatService = new ChatService();
 
 export const formatTime = (timestamp: number): string => {
