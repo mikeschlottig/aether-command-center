@@ -1,44 +1,33 @@
 import OpenAI from 'openai';
 import type { Message, ToolCall } from './types';
 import { getToolDefinitions, executeTool } from './tools';
-import { ChatCompletionMessageFunctionToolCall } from 'openai/resources/index.mjs';
-
-/**
- * ChatHandler - Handles all chat-related operations
- * 
- * This class encapsulates the OpenAI integration and tool execution logic,
- * making it easy for AI developers to understand and extend the functionality.
- */
+import { ChatCompletionMessageFunctionToolCall, ChatCompletionMessageParam, ChatCompletionMessageToolCall } from 'openai/resources/index.mjs';
 export class ChatHandler {
   private client: OpenAI;
   private model: string;
-
   private systemPrompt: string;
   private agentName: string;
   private agentAvatar: string;
   constructor(
-    aiGatewayUrl: string, 
-    apiKey: string, 
-    model: string, 
-    systemPrompt?: string, 
-    agentName?: string, 
+    aiGatewayUrl: string,
+    apiKey: string,
+    model: string,
+    systemPrompt?: string,
+    agentName?: string,
     agentAvatar?: string
   ) {
-    this.client = new OpenAI({ 
+    this.client = new OpenAI({
       baseURL: aiGatewayUrl,
-      apiKey: apiKey    });
-    console.log("BASE URL", aiGatewayUrl);
+      apiKey: apiKey
+    });
     this.model = model;
     this.systemPrompt = systemPrompt || 'You are a helpful AI assistant.';
     this.agentName = agentName || 'Assistant';
     this.agentAvatar = agentAvatar || '🤖';
   }
-  /**
-   * Process a user message and generate AI response with optional tool usage
-   */
   async processMessage(
-    message: string, 
-    conversationHistory: Message[], 
+    message: string,
+    conversationHistory: Message[],
     onChunk?: (chunk: string) => void
   ): Promise<{
     content: string;
@@ -46,9 +35,7 @@ export class ChatHandler {
   }> {
     const messages = this.buildConversationMessages(message, conversationHistory);
     const toolDefinitions = await getToolDefinitions();
-    
     if (onChunk) {
-      // Use streaming with callback
       const stream = await this.client.chat.completions.create({
         model: this.model,
         messages,
@@ -56,13 +43,9 @@ export class ChatHandler {
         tool_choice: 'auto',
         max_completion_tokens: 16000,
         stream: true,
-        // reasoning_effort: 'low'
       });
-
       return this.handleStreamResponse(stream, message, conversationHistory, onChunk);
     }
-
-    // Non-streaming response
     const completion = await this.client.chat.completions.create({
       model: this.model,
       messages,
@@ -71,10 +54,8 @@ export class ChatHandler {
       max_tokens: 16000,
       stream: false
     });
-
     return this.handleNonStreamResponse(completion, message, conversationHistory);
   }
-
   private async handleStreamResponse(
     stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
     message: string,
@@ -83,37 +64,28 @@ export class ChatHandler {
   ) {
     let fullContent = '';
     const accumulatedToolCalls: ChatCompletionMessageFunctionToolCall[] = [];
-    
     try {
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta;
-        
         if (delta?.content) {
           fullContent += delta.content;
           onChunk(delta.content);
         }
-        
-        // Accumulate tool calls from streaming chunks
         if (delta?.tool_calls) {
-          for (let i = 0; i < delta.tool_calls.length; i++) {
-            const deltaToolCall = delta.tool_calls[i];
+          for (const dtc of delta.tool_calls) {
+            const i = dtc.index;
             if (!accumulatedToolCalls[i]) {
               accumulatedToolCalls[i] = {
-                id: deltaToolCall.id || `tool_${Date.now()}_${i}`,
+                id: dtc.id || `tool_${Date.now()}_${i}`,
                 type: 'function',
                 function: {
-                  name: deltaToolCall.function?.name || '',
-                  arguments: deltaToolCall.function?.arguments || ''
+                  name: dtc.function?.name || '',
+                  arguments: dtc.function?.arguments || ''
                 }
               };
             } else {
-              // Append to existing tool call
-              if (deltaToolCall.function?.name && !accumulatedToolCalls[i].function.name) {
-                accumulatedToolCalls[i].function.name = deltaToolCall.function.name;
-              }
-              if (deltaToolCall.function?.arguments) {
-                accumulatedToolCalls[i].function.arguments += deltaToolCall.function.arguments;
-              }
+              if (dtc.function?.name) accumulatedToolCalls[i].function.name += dtc.function.name;
+              if (dtc.function?.arguments) accumulatedToolCalls[i].function.arguments += dtc.function.arguments;
             }
           }
         }
@@ -122,140 +94,101 @@ export class ChatHandler {
       console.error('Stream processing error:', error);
       throw new Error('Stream processing failed');
     }
-    
     if (accumulatedToolCalls.length > 0) {
       const executedTools = await this.executeToolCalls(accumulatedToolCalls);
-      const finalResponse = await this.generateToolResponse(message, conversationHistory, accumulatedToolCalls, executedTools);
+      const finalResponse = await this.generateToolResponse(message, conversationHistory, accumulatedToolCalls as unknown as ChatCompletionMessageToolCall[], executedTools);
       return { content: finalResponse, toolCalls: executedTools };
     }
-    
     return { content: fullContent };
   }
-
   private async handleNonStreamResponse(
     completion: OpenAI.Chat.Completions.ChatCompletion,
     message: string,
     conversationHistory: Message[]
   ) {
     const responseMessage = completion.choices[0]?.message;
-    
     if (!responseMessage) {
-      return { content: 'I apologize, but I encountered an issue processing your request.' };
+      return { content: 'I apologize, but I encountered an issue.' };
     }
-
     if (!responseMessage.tool_calls) {
-      return { 
-        content: responseMessage.content || 'I apologize, but I encountered an issue.' 
-      };
+      return { content: responseMessage.content || 'I apologize, but I encountered an issue.' };
     }
-
     const toolCalls = await this.executeToolCalls(responseMessage.tool_calls as ChatCompletionMessageFunctionToolCall[]);
     const finalResponse = await this.generateToolResponse(
-      message, 
-      conversationHistory, 
-      responseMessage.tool_calls, 
+      message,
+      conversationHistory,
+      responseMessage.tool_calls,
       toolCalls
     );
-
     return { content: finalResponse, toolCalls };
   }
-
-  /**
-   * Execute all tool calls from OpenAI response
-   */
   private async executeToolCalls(openAiToolCalls: ChatCompletionMessageFunctionToolCall[]): Promise<ToolCall[]> {
     return Promise.all(
       openAiToolCalls.map(async (tc) => {
         try {
           const args = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
           const result = await executeTool(tc.function.name, args);
-          return {
-            id: tc.id,
-            name: tc.function.name,
-            arguments: args,
-            result
-          };
+          return { id: tc.id, name: tc.function.name, arguments: args, result };
         } catch (error) {
           console.error(`Tool execution failed for ${tc.function.name}:`, error);
           return {
             id: tc.id,
             name: tc.function.name,
             arguments: {},
-            result: { error: `Failed to execute ${tc.function.name}: ${error instanceof Error ? error.message : 'Unknown error'}` }
+            result: { error: `Failed: ${error instanceof Error ? error.message : 'Unknown error'}` }
           };
         }
       })
     );
   }
-
-  /**
-   * Generate final response after tool execution
-   */
   private async generateToolResponse(
-    userMessage: string, 
-    history: Message[], 
-    openAiToolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[], 
+    userMessage: string,
+    history: Message[],
+    openAiToolCalls: ChatCompletionMessageToolCall[],
     toolResults: ToolCall[]
   ): Promise<string> {
-    const followUpCompletion = await this.client.chat.completions.create({
+    const messages: ChatCompletionMessageParam[] = [
+      { role: 'system', content: 'Respond naturally to the tool results.' },
+      ...history.slice(-3).map(m => this.mapMessageToOpenAI(m)),
+      { role: 'user', content: userMessage },
+      { role: 'assistant', content: null, tool_calls: openAiToolCalls },
+      ...toolResults.map(tr => ({
+        role: 'tool' as const,
+        content: JSON.stringify(tr.result),
+        tool_call_id: tr.id
+      }))
+    ];
+    const followUp = await this.client.chat.completions.create({
       model: this.model,
-      messages: [
-        { role: 'system', content: 'You are a helpful AI assistant. Respond naturally to the tool results.' },
-        ...history.slice(-3).map(m => ({ role: m.role, content: m.content })),
-        { role: 'user', content: userMessage },
-        { 
-          role: 'assistant', 
-          content: null,
-          tool_calls: openAiToolCalls
-        },
-        ...toolResults.map((result, index) => ({
-          role: 'tool' as const,
-          content: JSON.stringify(result.result),
-          tool_call_id: openAiToolCalls[index]?.id || result.id
-        }))
-      ],
+      messages,
       max_tokens: 16000
     });
-
-    return followUpCompletion.choices[0]?.message?.content || 'Tool results processed successfully.';
+    return followUp.choices[0]?.message?.content || 'Tool results processed.';
   }
-
-  /**
-   * Build conversation messages for OpenAI API
-   */
-  private buildConversationMessages(userMessage: string, history: Message[]) {
-    const fullSystemPrompt = `${this.systemPrompt}\n\n` +
-      `Your current identity: ${this.agentName} (${this.agentAvatar})\n` +
-      `HANDOFF PROTOCOL: If you encounter a task outside your expertise or if the user asks for a different specialist, ` +
-      `suggest a peer using the format: [HANDOFF: Agent Name]. Only do this when truly reaching a limitation. ` +
-      `Available peers might include: Coder Bot, Aether Sage, Architect, or other manifesting agents.`;
-
+  private buildConversationMessages(userMessage: string, history: Message[]): ChatCompletionMessageParam[] {
+    const fullPrompt = `${this.systemPrompt}\n\nIdentity: ${this.agentName} ${this.agentAvatar}\nHANDOFF PROTOCOL: Use [HANDOFF: Agent Name] for specialized tasks.`;
     return [
-      {
-        role: 'system' as const,
-        content: fullSystemPrompt
-      },
-      ...history.slice(-5).map(m => ({
-        role: m.role,
-        content: m.content 
-      })),
-      { role: 'user' as const, content: userMessage }
+      { role: 'system', content: fullPrompt },
+      ...history.slice(-5).map(m => this.mapMessageToOpenAI(m)),
+      { role: 'user', content: userMessage }
     ];
   }
-
-  /**
-   * Update the model for this chat handler
-   */
-  updateModel(newModel: string): void {
-    this.model = newModel;
+  private mapMessageToOpenAI(m: Message): ChatCompletionMessageParam {
+    if (m.role === 'tool') {
+      return { role: 'tool', content: m.content, tool_call_id: m.id } as ChatCompletionMessageParam;
+    }
+    const base: any = { role: m.role, content: m.content };
+    if (m.toolCalls) {
+      base.tool_calls = m.toolCalls.map(tc => ({
+        id: tc.id,
+        type: 'function',
+        function: { name: tc.name, arguments: JSON.stringify(tc.arguments) }
+      }));
+    }
+    return base as ChatCompletionMessageParam;
   }
-
-  /**
-   * Update the persona for this chat handler
-   */
+  updateModel(newModel: string): void { this.model = newModel; }
   updatePersona(systemPrompt: string, name: string, avatar: string): void {
-    this.systemPrompt = systemPrompt;
-    this.agentName = name;
-    this.agentAvatar = avatar;
+    this.systemPrompt = systemPrompt; this.agentName = name; this.agentAvatar = avatar;
   }
 }

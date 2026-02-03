@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
-import { Save, User, Brain, ScrollText, PenTool, Sparkles } from 'lucide-react';
+import { Save, User, Brain, PenTool, Sparkles } from 'lucide-react';
 import { useAgentStore } from '@/lib/store';
 import { PageHeader } from '@/components/illustrative/PageHeader';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { MODELS } from '@/lib/chat';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-const AVATARS = ['🤖', '🧙‍♂️', '🧚', '🦸‍♂️', '👩‍💻', '👨‍🔬', '🦉', '🦊', '🦁'];
+const AVATARS = ['🤖', '🧙‍♂️', '🧚', '🦸‍♂️', '👩‍💻', '👨‍🔬', '���', '🦊', '🦁'];
 const AVAILABLE_TOOLS = [
   { id: 'get_weather', name: 'Weather Watcher', desc: 'Real-time weather data' },
   { id: 'web_search', name: 'Web Oracle', desc: 'Live search and content retrieval' },
@@ -26,11 +26,11 @@ export function AgentAtelier() {
     name: '',
     description: '',
     systemPrompt: '',
-    modelId: MODELS[0].id,
+    modelId: MODELS[0]?.id || '',
     avatar: AVATARS[0],
     tools: [] as string[],
   });
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (!form.name || !form.systemPrompt) {
       toast.error("Manifestation Failed", { description: "Name and Soul (Prompt) are required." });
       return;
@@ -41,7 +41,7 @@ export function AgentAtelier() {
     });
     toast.success("Persona Manifested", { description: `${form.name} is now part of your crew.` });
     navigate('/');
-  };
+  }, [form, addPersona, navigate]);
   return (
     <AppLayout container>
       <PageHeader
@@ -62,7 +62,7 @@ export function AgentAtelier() {
                   id="name"
                   placeholder="e.g. Architect-1"
                   value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                   className="bg-background"
                 />
               </div>
@@ -72,7 +72,7 @@ export function AgentAtelier() {
                   id="description"
                   placeholder="e.g. Master of distributed systems"
                   value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                   className="bg-background"
                 />
               </div>
@@ -88,13 +88,13 @@ export function AgentAtelier() {
                 <Label>Brain Model</Label>
                 <Select
                   value={form.modelId}
-                  onValueChange={(val) => setForm({ ...form, modelId: val })}
+                  onValueChange={(val) => setForm((prev) => ({ ...prev, modelId: val }))}
                 >
                   <SelectTrigger className="bg-background">
                     <SelectValue placeholder="Select Brain" />
                   </SelectTrigger>
                   <SelectContent>
-                    {MODELS.map(m => (
+                    {MODELS.map((m) => (
                       <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -107,7 +107,7 @@ export function AgentAtelier() {
                   placeholder="Define their personality, constraints, and expertise..."
                   className="min-h-[200px] bg-background"
                   value={form.systemPrompt}
-                  onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
+                  onChange={(e) => setForm((prev) => ({ ...prev, systemPrompt: e.target.value }))}
                 />
               </div>
             </div>
@@ -124,8 +124,12 @@ export function AgentAtelier() {
                     id={tool.id}
                     checked={form.tools.includes(tool.id)}
                     onCheckedChange={(checked) => {
-                      if (checked) setForm({ ...form, tools: [...form.tools, tool.id] });
-                      else setForm({ ...form, tools: form.tools.filter(t => t !== tool.id) });
+                      setForm((prev) => ({
+                        ...prev,
+                        tools: checked 
+                          ? [...prev.tools, tool.id] 
+                          : prev.tools.filter((t) => t !== tool.id)
+                      }));
                     }}
                   />
                   <div className="grid gap-1.5 leading-none">
@@ -150,11 +154,11 @@ export function AgentAtelier() {
           <div className="sticky top-8 space-y-6">
             <h3 className="font-serif font-bold text-xl px-2">Avatar Select</h3>
             <div className="grid grid-cols-3 gap-3">
-              {AVATARS.map(av => (
+              {AVATARS.map((av) => (
                 <button
                   key={av}
                   type="button"
-                  onClick={() => setForm({ ...form, avatar: av })}
+                  onClick={() => setForm((prev) => ({ ...prev, avatar: av }))}
                   className={cn(
                     "h-16 rounded-2xl flex items-center justify-center text-3xl transition-all",
                     form.avatar === av

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, ArrowRight, Zap, Shield, Search, Terminal, Sparkles, User } from 'lucide-react';
+import { Plus, ArrowRight, Zap, Shield, Search, Terminal, Sparkles, MessageSquare } from 'lucide-react';
 import { useAgentStore } from '@/lib/store';
 import { PageHeader } from '@/components/illustrative/PageHeader';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -17,7 +17,6 @@ export function HomePage() {
   const skills = useAgentStore((s) => s.skills);
   const setActivePersona = useAgentStore((s) => s.setActivePersona);
   const [recentSessions, setRecentSessions] = React.useState<SessionInfo[]>([]);
-
   React.useEffect(() => {
     chatService.listSessions().then(res => {
       if (res.success && res.data) {
@@ -25,7 +24,6 @@ export function HomePage() {
       }
     });
   }, []);
-
   return (
     <AppLayout container>
       <div className="space-y-12">
@@ -118,8 +116,8 @@ export function HomePage() {
                 </CardContent>
               </Card>
             ))}
-            <Link 
-              to="/atelier" 
+            <Link
+              to="/atelier"
               className="group flex flex-col items-center justify-center h-full min-h-[300px] border-2 border-dashed border-primary/20 rounded-3xl hover:bg-primary/5 hover:border-primary/40 transition-all gap-4"
             >
               <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
@@ -129,7 +127,6 @@ export function HomePage() {
             </Link>
           </div>
         </section>
-
         {recentSessions.length > 0 && (
           <section className="space-y-6">
             <div className="flex items-center justify-between border-b pb-4">
@@ -154,7 +151,6 @@ export function HomePage() {
                       to="/deck"
                       onClick={() => {
                         chatService.switchSession(session.id);
-                        // Attempt to find a matching persona for the active session if stored in state (future)
                       }}
                       className={cn(buttonVariants({ variant: 'outline' }), "rounded-xl border-primary/20 hover:border-primary/40 font-bold group-hover:bg-primary group-hover:text-primary-foreground")}
                     >
@@ -166,7 +162,6 @@ export function HomePage() {
             </div>
           </section>
         )}
-
         <footer className="pt-16 pb-8 border-t text-center space-y-4">
           <div className="flex items-center justify-center gap-2">
             <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, User, Loader2, Eraser, Sparkles, MessageCircle } from 'lucide-react';
-import { useAgentStore } from '@/lib/store';
+import { useAgentStore, AgentPersona } from '@/lib/store';
 import { PageHeader } from '@/components/illustrative/PageHeader';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -35,34 +35,27 @@ export function CommandDeck() {
       const latest = await chatService.getMessages();
       if (latest.success && latest.data) {
         setMessages(latest.data.messages);
-        // Ensure the backend persona is matched if we have one in state
-        const persona = personas.find(p => p.id === activeId);
+        const persona = personas.find(p => p.id === activeId) || personas[0];
         if (persona) {
           await chatService.updatePersona(persona.name, persona.avatar, persona.systemPrompt);
         }
       }
     };
     syncSession();
-  }, []);
+  }, [activeId, personas]);
   useEffect(() => {
     scrollToBottom();
   }, [messages, streamingMessage]);
-
   const handleAgentHandoff = async (agent: AgentPersona) => {
     setActiveId(agent.id);
     await chatService.updatePersona(agent.name, agent.avatar, agent.systemPrompt);
     toast.success(`Authority Transferred`, { description: `${agent.name} is now in command.` });
-    
-    // Send a trigger message to the new agent
     setInput(`Hello ${agent.name}, I've been referred to you for your specialized expertise. How can you help me with the current task?`);
   };
-
   const handleSendMessage = async () => {
     if (!input.trim() || isProcessing) return;
     const persona = personas.find(p => p.id === activeId) || personas[0];
-    // Ensure persona is synced before first message
     await chatService.updatePersona(persona.name, persona.avatar, persona.systemPrompt);
-
     const userMsg: Message = {
       id: `u-${Date.now()}`,
       role: 'user',
@@ -75,14 +68,13 @@ export function CommandDeck() {
     setStreamingMessage('');
     try {
       const response = await chatService.sendMessage(
-        input, 
+        input,
         activePersona.modelId,
         (chunk) => {
           setStreamingMessage(prev => prev + chunk);
         }
       );
       if (response.success) {
-        // After streaming finishes or if non-streaming, sync full message list
         const latest = await chatService.getMessages();
         if (latest.success && latest.data) {
           setMessages(latest.data.messages);
@@ -107,10 +99,7 @@ export function CommandDeck() {
     <AppLayout className="flex flex-col h-screen overflow-hidden">
       <div className="flex-1 flex flex-col p-6 max-w-5xl mx-auto w-full">
         <div className="flex items-center justify-between mb-6">
-          <PageHeader
-            title="Command Deck"
-            className="mb-0"
-          />
+          <PageHeader title="Command Deck" className="mb-0" />
           <div className="flex items-center gap-3">
             <Select value={activeId || ''} onValueChange={setActiveId}>
               <SelectTrigger className="w-[220px] bg-background card-illustrative border-primary/20">
@@ -137,23 +126,17 @@ export function CommandDeck() {
                   </div>
                   <div className="space-y-2">
                     <h3 className="font-serif font-bold text-2xl">Awaiting Directives</h3>
-                    <p className="text-muted-foreground max-w-sm italic">
-                      "{activePersona.description}"
-                    </p>
+                    <p className="text-muted-foreground max-w-sm italic">"{activePersona.description}"</p>
                   </div>
                 </div>
               )}
-              
               <AnimatePresence initial={false}>
                 {messages.map((m) => (
                   <motion.div
                     key={m.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className={cn(
-                      "flex gap-4",
-                      m.role === 'user' ? "flex-row-reverse" : "flex-row"
-                    )}
+                    className={cn("flex gap-4", m.role === 'user' ? "flex-row-reverse" : "flex-row")}
                   >
                     <div className={cn(
                       "h-10 w-10 rounded-xl flex items-center justify-center text-xl shrink-0 shadow-sm border",
@@ -170,7 +153,6 @@ export function CommandDeck() {
                       )}>
                         <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
                       </div>
-                      
                       {m.toolCalls && m.toolCalls.length > 0 && (
                         <div className="space-y-2">
                           {m.toolCalls.map((tc: ToolCall) => (
@@ -178,14 +160,12 @@ export function CommandDeck() {
                           ))}
                         </div>
                       )}
-
-                      {m.role === 'assistant' && m.content.includes('[HANDOFF:') && (
+                      {m.role === 'assistant' && m.content?.includes('[HANDOFF:') && (
                         <div className="mt-2">
                           {(() => {
                             const match = m.content.match(/\[HANDOFF:\s*(.*?)\]/);
                             const suggestedName = match ? match[1].trim() : null;
                             const suggestedAgent = personas.find(p => p.name.toLowerCase().includes(suggestedName?.toLowerCase() || ''));
-                            
                             if (suggestedAgent && suggestedAgent.id !== activeId) {
                               return <HandoffProtocol suggestedAgent={suggestedAgent} onAccept={handleAgentHandoff} />;
                             }
@@ -248,12 +228,6 @@ export function CommandDeck() {
               >
                 <Send className="h-6 w-6" />
               </Button>
-            </div>
-            <div className="flex items-center justify-center gap-2 mt-4">
-               <Sparkles className="h-3 w-3 text-primary animate-pulse" />
-               <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60">
-                 Core Engine: {activePersona.modelId.split('/').pop()}
-               </p>
             </div>
           </div>
         </Card>
