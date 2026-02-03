@@ -53,6 +53,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
     if (crewNames) this.chatHandler?.updateCrew(crewNames);
     const userMessage = createMessage('user', message.trim());
     const updatedMessages = [...this.state.messages, userMessage];
+    // Persist immediately before starting processing
     this.setState({ ...this.state, messages: updatedMessages, isProcessing: true });
     try {
       if (!this.chatHandler) throw new Error('Chat handler not initialized');
@@ -61,18 +62,30 @@ export class ChatAgent extends Agent<Env, ChatState> {
         const writer = writable.getWriter();
         const encoder = createEncoder();
         (async () => {
+          let streamingText = '';
           try {
-            this.setState({ ...this.state, streamingMessage: '' });
+            // Streaming state is transient, don't write to storage on every chunk
             const response = await this.chatHandler!.processMessage(message, updatedMessages, (chunk: string) => {
-              this.setState({ ...this.state, streamingMessage: (this.state.streamingMessage || '') + chunk });
+              streamingText += chunk;
               writer.write(encoder.encode(chunk));
             });
+            // Persist ONLY once at the end of streaming
             const finalMessages = [...updatedMessages, ...response.messages];
-            this.setState({ ...this.state, messages: finalMessages, isProcessing: false, streamingMessage: '' });
+            this.setState({ 
+              ...this.state, 
+              messages: finalMessages, 
+              isProcessing: false,
+              streamingMessage: '' // Clear transient state
+            });
           } catch (error) {
+            console.error('Stream processing error:', error);
             const err = 'An error occurred during transmission.';
             writer.write(encoder.encode(err));
-            this.setState({ ...this.state, messages: [...updatedMessages, createMessage('assistant', err)], isProcessing: false });
+            this.setState({ 
+              ...this.state, 
+              messages: [...updatedMessages, createMessage('assistant', err)], 
+              isProcessing: false 
+            });
           } finally {
             writer.close();
           }
@@ -83,6 +96,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
       this.setState({ ...this.state, messages: [...updatedMessages, ...response.messages], isProcessing: false });
       return Response.json({ success: true, data: this.state });
     } catch (error) {
+      console.error('Chat message handling error:', error);
       this.setState({ ...this.state, isProcessing: false });
       return Response.json({ success: false, error: API_RESPONSES.PROCESSING_ERROR }, { status: 500 });
     }

@@ -26,9 +26,11 @@ export function CommandDeck() {
   const [isSynced, setIsSynced] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const activePersona = personas.find(p => p.id === activeId) || personas[0];
-  const scrollToBottom = () => {
+  const scrollToBottom = (instant = false) => {
     if (scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: 'smooth' });
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollIntoView({ behavior: instant ? 'auto' : 'smooth' });
+      });
     }
   };
   useEffect(() => {
@@ -54,14 +56,12 @@ export function CommandDeck() {
     setActiveId(agent.id);
     await chatService.updatePersona(agent.name, agent.avatar, agent.systemPrompt);
     toast.success(`Authority Transferred`, { description: `${agent.name} is now in command.` });
-    // Auto-inject a context bridge message
     const bridgeInput = `[SYSTEM: Authority transferred from ${oldName} to ${agent.name}. Summarizing previous context for continuity...]`;
     setInput(bridgeInput);
   };
   const handleSendMessage = async () => {
     if (!input.trim() || isProcessing) return;
     setIsSynced(false);
-    const persona = personas.find(p => p.id === activeId) || personas[0];
     const userMsg: Message = {
       id: `u-${Date.now()}`,
       role: 'user',
@@ -73,12 +73,14 @@ export function CommandDeck() {
     setIsProcessing(true);
     setStreamingMessage('');
     try {
+      const crewNames = personas.map(p => p.name);
       const response = await chatService.sendMessage(
         input,
         activePersona.modelId,
         (chunk) => {
           setStreamingMessage(prev => prev + chunk);
-        }
+        },
+        crewNames
       );
       if (response.success) {
         const latest = await chatService.getMessages();
@@ -208,7 +210,7 @@ export function CommandDeck() {
                   </div>
                 </motion.div>
               )}
-              <div ref={scrollRef} />
+              <div ref={scrollRef} className="h-px w-full" />
             </div>
           </ScrollArea>
           <div className="p-4 border-t bg-background/50 backdrop-blur-md shrink-0">

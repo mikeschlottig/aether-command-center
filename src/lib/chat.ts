@@ -16,12 +16,12 @@ class ChatService {
     this.sessionId = crypto.randomUUID();
     this.baseUrl = `/api/chat/${this.sessionId}`;
   }
-  async sendMessage(message: string, model?: string, onChunk?: (chunk: string) => void): Promise<ChatResponse> {
+  async sendMessage(message: string, model?: string, onChunk?: (chunk: string) => void, crewNames?: string[]): Promise<ChatResponse> {
     try {
       const response = await fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, model, stream: !!onChunk }),
+        body: JSON.stringify({ message, model, stream: !!onChunk, crewNames }),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       if (onChunk && response.body) {

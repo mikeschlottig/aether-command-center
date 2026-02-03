@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Terminal, Code2, Rocket, Info, FileCode, Plus, Trash2, CheckCircle2, Cpu, Globe, Database, Play } from 'lucide-react';
+import { Terminal, Code2, Rocket, Info, FileCode, Plus, Trash2, CheckCircle2, Cpu, Globe, Database, Play, AlertTriangle } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { PageHeader } from '@/components/illustrative/PageHeader';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { useAgentStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { motion } from 'framer-motion';
 import { WranglerConsole, LogEntry } from '@/components/illustrative/WranglerConsole';
 export function SkillForge() {
   const skills = useAgentStore(s => s.skills);
@@ -18,6 +18,7 @@ export function SkillForge() {
   const [code, setCode] = useState('');
   const [isDeploying, setIsDeploying] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [editorError, setEditorError] = useState(false);
   const activeSkill = skills.find(s => s.id === activeSkillId);
   useEffect(() => {
     if (activeSkill) {
@@ -110,7 +111,11 @@ export function SkillForge() {
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive"
-                    onClick={(e) => { e.stopPropagation(); deleteSkill(skill.id); if (activeSkillId === skill.id) setActiveSkillId(null); }}
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      deleteSkill(skill.id); 
+                      if (activeSkillId === skill.id) setActiveSkillId(null); 
+                    }}
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
@@ -124,27 +129,19 @@ export function SkillForge() {
               Edge Bindings
             </h4>
             <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between p-2 rounded-lg bg-background/50 border">
-                <div className="flex items-center gap-2">
-                  <Database className="h-3 w-3 text-orange-500" />
-                  <span>D1_STORE</span>
+              {[
+                { label: 'D1_STORE', icon: Database, color: 'text-orange-500' },
+                { label: 'KV_CACHE', icon: Globe, color: 'text-blue-500' },
+                { label: 'AI_GATEWAY', icon: Rocket, color: 'text-purple-500' }
+              ].map(binding => (
+                <div key={binding.label} className="flex items-center justify-between p-2 rounded-lg bg-background/50 border">
+                  <div className="flex items-center gap-2">
+                    <binding.icon className={cn("h-3 w-3", binding.color)} />
+                    <span>{binding.label}</span>
+                  </div>
+                  <div className="h-2 w-2 rounded-full bg-green-500" />
                 </div>
-                <div className="h-2 w-2 rounded-full bg-green-500" />
-              </div>
-              <div className="flex items-center justify-between p-2 rounded-lg bg-background/50 border">
-                <div className="flex items-center gap-2">
-                  <Globe className="h-3 w-3 text-blue-500" />
-                  <span>KV_CACHE</span>
-                </div>
-                <div className="h-2 w-2 rounded-full bg-green-500" />
-              </div>
-              <div className="flex items-center justify-between p-2 rounded-lg bg-background/50 border">
-                <div className="flex items-center gap-2">
-                  <Rocket className="h-3 w-3 text-purple-500" />
-                  <span>AI_GATEWAY</span>
-                </div>
-                <div className="h-2 w-2 rounded-full bg-green-500" />
-              </div>
+              ))}
             </div>
           </Card>
         </div>
@@ -168,25 +165,42 @@ export function SkillForge() {
                 </div>
               </div>
             </div>
-            <div className="pt-10">
-              <Editor
-                height="400px"
-                defaultLanguage="typescript"
-                theme="vs-light"
-                value={code}
-                onChange={(val) => setCode(val || '')}
-                loading={<div className="h-full w-full flex items-center justify-center italic text-muted-foreground">Awakening the Forge...</div>}
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 14,
-                  padding: { top: 20 },
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  lineNumbers: 'on',
-                  roundedSelection: true,
-                  scrollbar: { vertical: 'hidden' }
-                }}
-              />
+            <div className="pt-10 h-[400px]">
+              {editorError ? (
+                <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-4">
+                  <AlertTriangle className="h-12 w-12 text-orange-500" />
+                  <div>
+                    <h4 className="font-serif font-bold text-lg">Forge Malfunction</h4>
+                    <p className="text-sm text-muted-foreground">The advanced editor failed to manifest. Reverting to basic inscription tool.</p>
+                  </div>
+                  <Textarea 
+                    value={code} 
+                    onChange={(e) => setCode(e.target.value)}
+                    className="flex-1 font-mono text-xs h-full w-full"
+                  />
+                </div>
+              ) : (
+                <Editor
+                  height="100%"
+                  defaultLanguage="typescript"
+                  theme="vs-light"
+                  value={code}
+                  onChange={(val) => setCode(val || '')}
+                  onMount={() => setEditorError(false)}
+                  onError={() => setEditorError(true)}
+                  loading={<div className="h-full w-full flex items-center justify-center italic text-muted-foreground">Awakening the Forge...</div>}
+                  options={{
+                    minimap: { enabled: false },
+                    fontSize: 14,
+                    padding: { top: 20 },
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    lineNumbers: 'on',
+                    roundedSelection: true,
+                    scrollbar: { vertical: 'hidden' }
+                  }}
+                />
+              )}
             </div>
           </Card>
           <div className="flex items-center justify-between gap-4">

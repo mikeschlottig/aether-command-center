@@ -1,7 +1,6 @@
 import OpenAI from 'openai';
 import type { Message, ToolCall } from './types';
 import { getToolDefinitions, executeTool } from './tools';
-import { ChatCompletionMessageFunctionToolCall, ChatCompletionMessageParam, ChatCompletionMessageToolCall } from 'openai/resources/index.mjs';
 export class ChatHandler {
   private client: OpenAI;
   private model: string;
@@ -15,7 +14,7 @@ export class ChatHandler {
     this.systemPrompt = systemPrompt || 'You are a helpful AI assistant.';
     this.agentName = agentName || 'Assistant';
     this.agentAvatar = agentAvatar || '🤖';
-    this.activeCrew = []; // Will be updated per request
+    this.activeCrew = [];
   }
   async processMessage(message: string, conversationHistory: Message[], onChunk?: (chunk: string) => void): Promise<{ content: string; messages: Message[]; toolCalls?: ToolCall[] }> {
     const messages = this.buildConversationMessages(message, conversationHistory);
@@ -43,7 +42,7 @@ export class ChatHandler {
   }
   private async handleStreamResponse(stream: AsyncIterable<any>, message: string, history: Message[], onChunk: (chunk: string) => void) {
     let fullContent = '';
-    const accToolCalls: ChatCompletionMessageFunctionToolCall[] = [];
+    const accToolCalls: any[] = [];
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta;
       if (delta?.content) {
@@ -68,7 +67,7 @@ export class ChatHandler {
     }
     if (accToolCalls.length > 0) {
       const toolResults = await this.executeToolCalls(accToolCalls);
-      const followUp = await this.generateToolResponse(message, history, accToolCalls as unknown as ChatCompletionMessageToolCall[], toolResults);
+      const followUp = await this.generateToolResponse(message, history, accToolCalls, toolResults);
       const assistantToolMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', timestamp: Date.now(), toolCalls: toolResults };
       const toolMsg: Message = { id: crypto.randomUUID(), role: 'tool', content: JSON.stringify(toolResults.map(tr => tr.result)), timestamp: Date.now() };
       const finalMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: followUp, timestamp: Date.now() };
@@ -77,51 +76,60 @@ export class ChatHandler {
     const simpleMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: fullContent, timestamp: Date.now() };
     return { content: fullContent, messages: [simpleMsg] };
   }
-  private async handleNonStreamResponse(completion: OpenAI.Chat.Completions.ChatCompletion, message: string, history: Message[]) {
+  private async handleNonStreamResponse(completion: any, message: string, history: Message[]) {
     const resp = completion.choices[0]?.message;
     if (!resp) throw new Error('No response from AI');
     if (!resp.tool_calls) {
       const msg: Message = { id: crypto.randomUUID(), role: 'assistant', content: resp.content || '', timestamp: Date.now() };
       return { content: resp.content || '', messages: [msg] };
     }
-    const toolResults = await this.executeToolCalls(resp.tool_calls as ChatCompletionMessageFunctionToolCall[]);
+    const toolResults = await this.executeToolCalls(resp.tool_calls);
     const followUp = await this.generateToolResponse(message, history, resp.tool_calls, toolResults);
     const assistantToolMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', timestamp: Date.now(), toolCalls: toolResults };
     const toolMsg: Message = { id: crypto.randomUUID(), role: 'tool', content: JSON.stringify(toolResults.map(tr => tr.result)), timestamp: Date.now() };
     const finalMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: followUp, timestamp: Date.now() };
     return { content: followUp, messages: [assistantToolMsg, toolMsg, finalMsg], toolCalls: toolResults };
   }
-  private async executeToolCalls(openAiToolCalls: ChatCompletionMessageFunctionToolCall[]): Promise<ToolCall[]> {
+  private async executeToolCalls(openAiToolCalls: any[]): Promise<ToolCall[]> {
     return Promise.all(openAiToolCalls.map(async (tc) => {
       const args = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
       const result = await executeTool(tc.function.name, args);
       return { id: tc.id, name: tc.function.name, arguments: args, result };
     }));
   }
-  private async generateToolResponse(userMsg: string, history: Message[], toolCalls: ChatCompletionMessageToolCall[], results: ToolCall[]): Promise<string> {
-    const messages: ChatCompletionMessageParam[] = [
-      { role: 'system', content: `Summarize the tool results. ${this.buildHandoffDirective()}` },
+  private async generateToolResponse(userMsg: string, history: Message[], toolCalls: any[], results: ToolCall[]): Promise<string> {
+    const messages: any[] = [
+      { role: 'system', content: `Summarize the tool results efficiently. ${this.buildHandoffDirective()}` },
       ...history.slice(-5).map(m => this.mapMessageToOpenAI(m)),
       { role: 'assistant', content: null, tool_calls: toolCalls },
-      ...results.map(tr => ({ role: 'tool' as const, content: JSON.stringify(tr.result), tool_call_id: tr.id }))
+      ...results.map(tr => ({ role: 'tool', content: JSON.stringify(tr.result), tool_call_id: tr.id }))
     ];
     const followUp = await this.client.chat.completions.create({ model: this.model, messages, max_tokens: 4000 });
     return followUp.choices[0]?.message?.content || 'Task completed.';
   }
   private buildHandoffDirective(): string {
-    return `PROTOCOL DIRECTIVE: Monitor your confidence. If a task exceeds your persona "${this.agentName}" or tools fail repeatedly, you MUST suggest a delegate. SIGNAL: "[HANDOFF:AgentName]". Available crew: ${this.activeCrew.join(', ') || 'none'}.`;
+    const crew = this.activeCrew.length > 0 ? this.activeCrew.join(', ') : 'none';
+    return `PROTOCOL DIRECTIVE: Monitor your confidence. If a task exceeds your persona "${this.agentName}" or tools fail repeatedly, suggest a handoff. SIGNAL: "[HANDOFF:AgentName]". Available crew: ${crew}. If crew list is empty, suggest that a specialized agent should be Manifested in the Atelier.`;
   }
-  private buildConversationMessages(userMsg: string, history: Message[]): ChatCompletionMessageParam[] {
+  private buildConversationMessages(userMsg: string, history: Message[]): any[] {
     const identity = `${this.agentName} ${this.agentAvatar}\nSoul: ${this.systemPrompt}\n${this.buildHandoffDirective()}`;
-    return [{ role: 'system', content: identity }, ...history.slice(-10).map(m => this.mapMessageToOpenAI(m)), { role: 'user', content: userMsg }];
+    return [
+      { role: 'system', content: identity },
+      ...history.slice(-10).map(m => this.mapMessageToOpenAI(m)),
+      { role: 'user', content: userMsg }
+    ];
   }
-  private mapMessageToOpenAI(m: Message): ChatCompletionMessageParam {
-    if (m.role === 'tool') return { role: 'tool', content: m.content || '{}', tool_call_id: m.id } as ChatCompletionMessageParam;
+  private mapMessageToOpenAI(m: Message): any {
+    if (m.role === 'tool') return { role: 'tool', content: m.content || '{}', tool_call_id: m.id };
     const base: any = { role: m.role, content: m.content };
     if (m.toolCalls) {
-      base.tool_calls = m.toolCalls.map(tc => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.arguments) } }));
+      base.tool_calls = m.toolCalls.map(tc => ({ 
+        id: tc.id, 
+        type: 'function', 
+        function: { name: tc.name, arguments: JSON.stringify(tc.arguments) } 
+      }));
     }
-    return base as ChatCompletionMessageParam;
+    return base;
   }
   updateModel(newModel: string): void { this.model = newModel; }
   updatePersona(soul: string, name: string, avatar: string): void { this.systemPrompt = soul; this.agentName = name; this.agentAvatar = avatar; }
