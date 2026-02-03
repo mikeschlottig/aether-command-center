@@ -1,304 +1,77 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  Terminal,
-  Code2,
-  Rocket,
-  Info,
-  FileCode,
-  Plus,
-  Trash2,
-  CheckCircle2,
-  Cpu,
-  Globe,
-  Database,
-  Play,
-  AlertTriangle
-} from 'lucide-react';
-import Editor from '@monaco-editor/react';
+import React from 'react';
+import { Terminal, Code2, Rocket, Info } from 'lucide-react';
 import { PageHeader } from '@/components/illustrative/PageHeader';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { useAgentStore } from '@/lib/store';
-import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
-import { WranglerConsole, LogEntry } from '@/components/illustrative/WranglerConsole';
-type MonacoErrorBoundaryProps = {
-  children: React.ReactNode;
-  onError?: (error: unknown) => void;
-};
-type MonacoErrorBoundaryState = {
-  hasError: boolean;
-};
-class MonacoErrorBoundary extends React.PureComponent<MonacoErrorBoundaryProps, MonacoErrorBoundaryState> {
-  state: MonacoErrorBoundaryState = { hasError: false };
-  static getDerivedStateFromError(): MonacoErrorBoundaryState {
-    return { hasError: true };
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+const MOCK_CODE = `/**
+ * Weather Skill v1.0
+ * Fetches real-time environmental data via edge API.
+ */
+export async function get_weather(location: string) {
+  const endpoint = \`https://api.aether.com/weather/\${location}\`;
+  const response = await fetch(endpoint);
+  if (!response.ok) {
+    throw new Error('Cloud obstruction detected.');
   }
-  componentDidCatch(error: unknown) {
-    console.error('[SkillForge] Monaco editor crashed:', error);
-    this.props.onError?.(error);
-  }
-  render() {
-    if (this.state.hasError) return null;
-    return this.props.children;
-  }
-}
+  return await response.json();
+}`;
 export function SkillForge() {
-  const skills = useAgentStore((s) => s.skills);
-  const saveSkill = useAgentStore((s) => s.saveSkill);
-  const deleteSkill = useAgentStore((s) => s.deleteSkill);
-  const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
-  const [code, setCode] = useState('');
-  const [isDeploying, setIsDeploying] = useState(false);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [editorError, setEditorError] = useState(false);
-  const idCounterRef = useRef(0);
-  const createUniqueId = useCallback((prefix: string) => {
-    const maybeUuid =
-      typeof globalThis !== 'undefined' &&
-      typeof globalThis.crypto !== 'undefined' &&
-      typeof globalThis.crypto.randomUUID === 'function'
-        ? globalThis.crypto.randomUUID()
-        : null;
-    if (maybeUuid) return `${prefix}-${maybeUuid}`;
-    idCounterRef.current += 1;
-    return `${prefix}-${Date.now()}-${idCounterRef.current}`;
-  }, []);
-  const activeSkill = skills.find((s) => s.id === activeSkillId);
-  useEffect(() => {
-    // Allow Monaco to recover per-skill selection
-    setEditorError(false);
-  }, [activeSkillId]);
-  useEffect(() => {
-    if (activeSkill) {
-      setCode(activeSkill.code);
-    }
-  }, [activeSkill]);
-  const addLog = useCallback(
-    (message: string, type: LogEntry['type'] = 'info') => {
-      setLogs((prev) => [
-        ...prev,
-        { id: createUniqueId('log'), message, type, timestamp: Date.now() }
-      ]);
-    },
-    [createUniqueId]
-  );
-  const handleSave = () => {
-    if (!activeSkillId || !activeSkill) return;
-    saveSkill({ ...activeSkill, code });
-    addLog(`Saved ${activeSkill.name} to local drafting space.`, 'info');
-    toast.success('Script Saved Locally');
-  };
-  const handleDeploy = () => {
-    if (!activeSkill) return;
-    setIsDeploying(true);
-    addLog(`wrangler deploy ${activeSkill.name} --env production`, 'command');
-    addLog(`Gathering edge dependencies...`, 'info');
-    setTimeout(() => {
-      addLog(`Uploading worker bundle to Cloudflare Global Network...`, 'info');
-      setTimeout(() => {
-        setIsDeploying(false);
-        handleSave();
-        addLog(`Successfully manifested ${activeSkill.name} at the edge!`, 'success');
-        addLog(`Worker accessible at https://${activeSkill.name.split('.')[0]}.aether.workers.dev`, 'info');
-        toast.success('Skill Manifested on Edge', {
-          description: 'Agents can now utilize this tool.',
-          icon: <CheckCircle2 className="text-green-500" />
-        });
-      }, 1500);
-    }, 1000);
-  };
-  const handlePreview = () => {
-    if (!activeSkill) return;
-    addLog(`wrangler dev --remote`, 'command');
-    addLog(`[Preview] Invoking ${activeSkill.name}...`, 'info');
-    setTimeout(() => {
-      addLog(`[Response] { "status": "active", "latency": "42ms", "result": "Aether flow stable" }`, 'success');
-    }, 800);
-  };
-  const createNewSkill = () => {
-    const id = createUniqueId('skill');
-    const newSkill = {
-      id,
-      name: `skill-${skills.length + 1}.ts`,
-      language: 'typescript',
-      description: 'A custom edge capability',
-      updatedAt: Date.now(),
-      code: `export async function handle_request(args: any) {\n  // Implement logic here\n  return { success: true, timestamp: Date.now() };\n}`,
-      bindings: { kv: [], d1: [], ai: true }
-    };
-    saveSkill(newSkill);
-    setActiveSkillId(id);
-    setEditorError(false);
-    addLog(`Initialized new workspace: ${newSkill.name}`, 'info');
-  };
   return (
     <AppLayout container>
-      <PageHeader
-        title="Skill Forge"
-        description="Write and deploy TypeScript logic that agents use to interact with the world."
+      <PageHeader 
+        title="Skill Forge" 
+        description="Write and deploy TypeScript logic that agents can use as 'Hands' to interact with the physical and digital world."
       />
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        <div className="space-y-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between px-2">
-              <h3 className="font-serif font-bold text-lg">Scripts</h3>
-              <Button size="icon" variant="ghost" onClick={createNewSkill} className="h-8 w-8">
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="space-y-2">
-              {skills.map((skill) => (
-                <div
-                  key={skill.id}
-                  onClick={() => setActiveSkillId(skill.id)}
-                  className={cn(
-                    'group flex items-center justify-between p-3 rounded-xl border-2 transition-all cursor-pointer',
-                    activeSkillId === skill.id
-                      ? 'bg-primary/5 border-primary shadow-sm'
-                      : 'bg-background border-transparent hover:bg-muted/50'
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <FileCode
-                      className={cn(
-                        'h-4 w-4',
-                        activeSkillId === skill.id ? 'text-primary' : 'text-muted-foreground'
-                      )}
-                    />
-                    <span className="text-sm font-medium">{skill.name}</span>
-                  </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteSkill(skill.id);
-                      if (activeSkillId === skill.id) {
-                        setActiveSkillId(null);
-                        setEditorError(false);
-                      }
-                    }}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-          <Card className="p-4 card-illustrative border-primary/10 bg-primary/5 space-y-4">
-            <h4 className="font-serif font-bold flex items-center gap-2">
-              <Cpu className="h-4 w-4 text-primary" />
-              Edge Bindings
-            </h4>
-            <div className="space-y-2 text-xs">
-              {[
-                { label: 'D1_STORE', icon: Database, color: 'text-orange-500' },
-                { label: 'KV_CACHE', icon: Globe, color: 'text-blue-500' },
-                { label: 'AI_GATEWAY', icon: Rocket, color: 'text-purple-500' }
-              ].map((binding) => (
-                <div
-                  key={binding.label}
-                  className="flex items-center justify-between p-2 rounded-lg bg-background/50 border"
-                >
-                  <div className="flex items-center gap-2">
-                    <binding.icon className={cn('h-3 w-3', binding.color)} />
-                    <span>{binding.label}</span>
-                  </div>
-                  <div className="h-2 w-2 rounded-full bg-green-500" />
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
         <div className="lg:col-span-3 space-y-6">
-          <Card className="card-illustrative border-primary/20 bg-background overflow-hidden relative min-h-[400px]">
-            <div className="absolute top-0 left-0 w-full h-10 bg-muted/30 border-b flex items-center px-4 justify-between z-10 backdrop-blur-sm">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-red-400" />
-                <div className="h-3 w-3 rounded-full bg-yellow-400" />
-                <div className="h-3 w-3 rounded-full bg-green-400" />
-                <span className="text-xs text-muted-foreground ml-2 font-mono opacity-70">
-                  {activeSkill?.name || 'editor'}
-                </span>
-              </div>
-              <div className="flex items-center gap-4">
-                <Button variant="ghost" size="sm" onClick={handlePreview} className="h-7 text-xs gap-1">
-                  <Play className="h-3 w-3" /> Preview
-                </Button>
-                <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-tighter">
-                  Edge-Runtime v2.4
-                </div>
-              </div>
+          <Card className="card-illustrative border-primary/20 bg-background font-mono relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-8 bg-muted flex items-center px-4 gap-2">
+              <div className="h-3 w-3 rounded-full bg-red-400" />
+              <div className="h-3 w-3 rounded-full bg-yellow-400" />
+              <div className="h-3 w-3 rounded-full bg-green-400" />
+              <span className="text-xs text-muted-foreground ml-2 font-sans opacity-70">weather-watcher.ts</span>
             </div>
-            <div className="pt-10 h-[400px]">
-              {editorError ? (
-                <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-4">
-                  <AlertTriangle className="h-12 w-12 text-orange-500" />
-                  <div>
-                    <h4 className="font-serif font-bold text-lg">Forge Malfunction</h4>
-                    <p className="text-sm text-muted-foreground">
-                      The advanced editor failed to manifest. Reverting to basic inscription tool.
-                    </p>
-                  </div>
-                  <Textarea
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    className="flex-1 font-mono text-xs h-full w-full"
-                  />
-                </div>
-              ) : (
-                <MonacoErrorBoundary key={activeSkillId || 'no-skill'} onError={() => setEditorError(true)}>
-                  <Editor
-                    height="100%"
-                    defaultLanguage="typescript"
-                    theme="vs-light"
-                    value={code}
-                    onChange={(val) => setCode(val || '')}
-                    onMount={() => setEditorError(false)}
-                    loading={
-                      <div className="h-full w-full flex items-center justify-center italic text-muted-foreground">
-                        Awakening the Forge...
-                      </div>
-                    }
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 14,
-                      padding: { top: 20 },
-                      scrollBeyondLastLine: false,
-                      automaticLayout: true,
-                      lineNumbers: 'on',
-                      roundedSelection: true,
-                      scrollbar: { vertical: 'hidden' }
-                    }}
-                  />
-                </MonacoErrorBoundary>
-              )}
-            </div>
+            <CardContent className="pt-12">
+              <pre className="text-sm text-primary/80 leading-relaxed overflow-x-auto">
+                <code>{MOCK_CODE}</code>
+              </pre>
+            </CardContent>
           </Card>
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex justify-end gap-4">
             <div className="flex items-center gap-2 px-4 text-sm text-muted-foreground font-medium italic">
               <Info className="h-4 w-4" />
-              {activeSkill ? `Forge Sync: ${new Date(activeSkill.updatedAt).toLocaleTimeString()}` : 'Select a script'}
+              Manifestation currently locked in preview mode.
             </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={handleSave} className="rounded-xl">
-                Save Local
-              </Button>
-              <Button
-                onClick={handleDeploy}
-                disabled={isDeploying || !activeSkillId}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg relative overflow-hidden"
-              >
-                {isDeploying ? 'Manifesting...' : 'Deploy to Edge'}
-                <Rocket className={cn('h-4 w-4', isDeploying && 'animate-bounce')} />
-              </Button>
-            </div>
+            <button disabled className="btn-gradient opacity-50 px-8 py-3 rounded-xl font-bold flex items-center gap-2 cursor-not-allowed">
+              <Rocket className="h-4 w-4" />
+              Deploy to Edge
+            </button>
           </div>
-          <WranglerConsole logs={logs} onClear={() => setLogs([])} />
+        </div>
+        <div className="space-y-6">
+          <Card className="card-illustrative border-indigo-200 bg-indigo-50/20">
+            <CardHeader>
+              <Terminal className="h-5 w-5 text-indigo-500 mb-2" />
+              <CardTitle className="text-lg">What is a Skill?</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground leading-relaxed">
+              Skills are Cloudflare Workers that follow the Model Context Protocol (MCP). When deployed, agents can autonomously decide when to call these functions.
+            </CardContent>
+          </Card>
+          <Card className="card-illustrative border-amber-200 bg-amber-50/20">
+            <CardHeader>
+              <Code2 className="h-5 w-5 text-amber-500 mb-2" />
+              <CardTitle className="text-lg">Forge Roadmap</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="text-xs space-y-2 font-medium">
+                <li className="flex gap-2">✔️ Monaco Editor Integration</li>
+                <li className="flex gap-2">✔️ Typescript Validation</li>
+                <li className="flex gap-2 opacity-50">⭕ Real-time Deployment</li>
+                <li className="flex gap-2 opacity-50">⭕ Log Monitoring</li>
+              </ul>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </AppLayout>

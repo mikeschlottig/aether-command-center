@@ -1,138 +1,105 @@
-// Home page of the app.
-// Currently a demo placeholder "please wait" screen.
-// Replace this file with your actual app UI. Do not delete it to use some other file as homepage. Simply replace the entire contents of this file.
-
-import { useEffect, useMemo, useState } from 'react'
-import { Sparkles } from 'lucide-react'
-
-import { ThemeToggle } from '@/components/ThemeToggle'
-import { HAS_TEMPLATE_DEMO, TemplateDemo } from '@/components/TemplateDemo'
-import { Button } from '@/components/ui/button'
-import { Toaster, toast } from '@/components/ui/sonner'
-
-function formatDuration(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { Plus, User, ArrowRight, Zap, Shield, Search } from 'lucide-react';
+import { useAgentStore } from '@/lib/store';
+import { PageHeader } from '@/components/illustrative/PageHeader';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 export function HomePage() {
-  const [coins, setCoins] = useState(0)
-  const [isRunning, setIsRunning] = useState(false)
-  const [startedAt, setStartedAt] = useState<number | null>(null)
-  const [elapsedMs, setElapsedMs] = useState(0)
-
-  useEffect(() => {
-    if (!isRunning || startedAt === null) return
-
-    const t = setInterval(() => {
-      setElapsedMs(Date.now() - startedAt)
-    }, 250)
-
-    return () => clearInterval(t)
-  }, [isRunning, startedAt])
-
-  const formatted = useMemo(() => formatDuration(elapsedMs), [elapsedMs])
-
-  const onPleaseWait = () => {
-    setCoins((c) => c + 1)
-
-    if (!isRunning) {
-      // Resume from the current elapsed time
-      setStartedAt(Date.now() - elapsedMs)
-      setIsRunning(true)
-      toast.success('Building your app…', {
-        description: "Hang tight — we're setting everything up.",
-      })
-      return
-    }
-
-    setIsRunning(false)
-    toast.info('Still working…', {
-      description: 'You can come back in a moment.',
-    })
-  }
-
-  const onReset = () => {
-    setCoins(0)
-    setIsRunning(false)
-    setStartedAt(null)
-    setElapsedMs(0)
-    toast('Reset complete')
-  }
-
-  const onAddCoin = () => {
-    setCoins((c) => c + 1)
-    toast('Coin added')
-  }
-
+  const personas = useAgentStore((s) => s.personas);
+  const setActivePersona = useAgentStore((s) => s.setActivePersona);
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-4 overflow-hidden relative">
-      <ThemeToggle />
-      <div className="absolute inset-0 bg-gradient-rainbow opacity-10 dark:opacity-20 pointer-events-none" />
-
-      <div className="text-center space-y-8 relative z-10 animate-fade-in w-full">
-        <div className="flex justify-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-primary floating">
-            <Sparkles className="w-8 h-8 text-white rotating" />
-          </div>
+    <AppLayout container>
+      <div className="space-y-12">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <PageHeader 
+            title="Command Center" 
+            description="Orchestrate your fleet of digital personas and monitor their activities from a single high-vantage point."
+          />
+          <Button asChild className="btn-gradient shadow-lg">
+            <Link to="/atelier" className="flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Manifest New Agent
+            </Link>
+          </Button>
         </div>
-
-        <div className="space-y-3">
-          <h1 className="text-5xl md:text-7xl font-display font-bold text-balance leading-tight">
-            Creating your <span className="text-gradient">app</span>
-          </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto text-pretty">
-            Your application would be ready soon.
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="card-illustrative border-primary/20 bg-primary/5">
+            <CardHeader className="pb-2">
+              <Zap className="h-6 w-6 text-primary mb-2" />
+              <CardTitle className="text-xl">Fast Sync</CardTitle>
+              <CardDescription>Edge processing enabled</CardDescription>
+            </CardHeader>
+          </Card>
+          <Card className="card-illustrative border-orange-200 bg-orange-50/30">
+            <CardHeader className="pb-2">
+              <Shield className="h-6 w-6 text-orange-500 mb-2" />
+              <CardTitle className="text-xl">Safety Node</CardTitle>
+              <CardDescription>Content filtering active</CardDescription>
+            </CardHeader>
+          </Card>
+          <Card className="card-illustrative border-indigo-200 bg-indigo-50/30">
+            <CardHeader className="pb-2">
+              <Search className="h-6 w-6 text-indigo-500 mb-2" />
+              <CardTitle className="text-xl">Intelligence</CardTitle>
+              <CardDescription>Tools ready for invocation</CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+        <section className="space-y-6">
+          <div className="flex items-center justify-between border-b pb-4">
+            <h2 className="text-2xl font-serif font-bold">Active Crew</h2>
+            <Link to="/atelier" className="text-sm font-semibold text-primary hover:underline flex items-center gap-1">
+              View All <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {personas.map((persona) => (
+              <Card key={persona.id} className="card-illustrative group overflow-hidden">
+                <CardHeader className="flex flex-row items-center gap-4 space-y-0">
+                  <div className="h-12 w-12 rounded-full bg-accent flex items-center justify-center text-2xl shadow-inner">
+                    {persona.avatar}
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">{persona.name}</CardTitle>
+                    <CardDescription className="line-clamp-1">{persona.modelId.split('/').pop()}</CardDescription>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground line-clamp-2 italic">
+                    "{persona.description}"
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {persona.tools.map(tool => (
+                      <Badge key={tool} variant="secondary" className="text-[10px] uppercase tracking-wider font-bold opacity-70">
+                        {tool.replace('_', ' ')}
+                      </Badge>
+                    ))}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    className="w-full mt-2 group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
+                    onClick={() => setActivePersona(persona.id)}
+                    asChild
+                  >
+                    <Link to="/deck">Summon to Deck</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+        <footer className="pt-12 border-t text-center space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Aether Command v1.0.0 — Crafted for the edge.
           </p>
-        </div>
-
-        {HAS_TEMPLATE_DEMO ? (
-          <div className="max-w-5xl mx-auto text-left">
-            <TemplateDemo />
-          </div>
-        ) : (
-          <>
-            <div className="flex justify-center gap-4">
-              <Button
-                size="lg"
-                onClick={onPleaseWait}
-                className="btn-gradient px-8 py-4 text-lg font-semibold hover:-translate-y-0.5 transition-all duration-200"
-                aria-live="polite"
-              >
-                Please Wait
-              </Button>
-            </div>
-
-            <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-              <div>
-                Time elapsed:{' '}
-                <span className="font-medium tabular-nums text-foreground">{formatted}</span>
-              </div>
-              <div>
-                Coins:{' '}
-                <span className="font-medium tabular-nums text-foreground">{coins}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-center gap-2">
-              <Button variant="outline" size="sm" onClick={onReset}>
-                Reset
-              </Button>
-              <Button variant="outline" size="sm" onClick={onAddCoin}>
-                Add Coin
-              </Button>
-            </div>
-          </>
-        )}
+          <p className="text-xs text-muted-foreground/50">
+            Note: Requests may be limited during peak hours.
+          </p>
+        </footer>
       </div>
-
-      <footer className="absolute bottom-8 text-center text-muted-foreground/80">
-        <p>Powered by Cloudflare</p>
-      </footer>
-
-      <Toaster richColors closeButton />
-    </div>
-  )
+    </AppLayout>
+  );
 }
