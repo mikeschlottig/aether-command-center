@@ -1,6 +1,6 @@
 # Cloudflare AI Chat Agent Template
 
-[![[cloudflarebutton]]](https://deploy.workers.cloudflare.com)
+[![[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mikeschlottig/aether-command-center)]](https://deploy.workers.cloudflare.com)
 
 A production-ready Cloudflare Workers template for building AI-powered chat applications. Features persistent chat sessions via Durable Objects, streaming responses, tool calling (web search, weather, MCP integration), and a modern React frontend with shadcn/ui.
 
@@ -129,7 +129,7 @@ Deploy to Cloudflare Workers with Pages for assets.
    ```
    Or use the button:
 
-   [![[cloudflarebutton]]](https://deploy.workers.cloudflare.com)
+   [![[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mikeschlottig/aether-command-center)]](https://deploy.workers.cloudflare.com)
 
 3. **Custom Domain**: `wrangler pages deploy dist --project-name <name>`.
 4. **Environment Vars**: Set in Wrangler dashboard or CLI.
