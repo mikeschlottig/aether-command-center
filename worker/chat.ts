@@ -8,7 +8,14 @@ export class ChatHandler {
   private agentName: string;
   private agentAvatar: string;
   private activeCrew: string[];
-  constructor(aiGatewayUrl: string, apiKey: string, model: string, systemPrompt?: string, agentName?: string, agentAvatar?: string) {
+  constructor(
+    aiGatewayUrl: string,
+    apiKey: string,
+    model: string,
+    systemPrompt?: string,
+    agentName?: string,
+    agentAvatar?: string
+  ) {
     this.client = new OpenAI({ baseURL: aiGatewayUrl, apiKey: apiKey });
     this.model = model;
     this.systemPrompt = systemPrompt || 'You are a helpful AI assistant.';
@@ -16,7 +23,11 @@ export class ChatHandler {
     this.agentAvatar = agentAvatar || '🤖';
     this.activeCrew = [];
   }
-  async processMessage(message: string, conversationHistory: Message[], onChunk?: (chunk: string) => void): Promise<{ content: string; messages: Message[]; toolCalls?: ToolCall[] }> {
+  async processMessage(
+    message: string,
+    conversationHistory: Message[],
+    onChunk?: (chunk: string) => void
+  ): Promise<{ content: string; messages: Message[]; toolCalls?: ToolCall[] }> {
     const messages = this.buildConversationMessages(message, conversationHistory);
     const toolDefinitions = await getToolDefinitions();
     if (onChunk) {
@@ -40,7 +51,12 @@ export class ChatHandler {
     });
     return this.handleNonStreamResponse(completion, message, conversationHistory);
   }
-  private async handleStreamResponse(stream: AsyncIterable<any>, message: string, history: Message[], onChunk: (chunk: string) => void) {
+  private async handleStreamResponse(
+    stream: AsyncIterable<any>,
+    message: string,
+    history: Message[],
+    onChunk: (chunk: string) => void
+  ) {
     let fullContent = '';
     const accToolCalls: any[] = [];
     for await (const chunk of stream) {
@@ -68,10 +84,16 @@ export class ChatHandler {
     if (accToolCalls.length > 0) {
       const toolResults = await this.executeToolCalls(accToolCalls);
       const followUp = await this.generateToolResponse(message, history, accToolCalls, toolResults);
-      const assistantToolMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', timestamp: Date.now(), toolCalls: toolResults };
-      const toolMsg: Message = { id: crypto.randomUUID(), role: 'tool', content: JSON.stringify(toolResults.map(tr => tr.result)), timestamp: Date.now() };
+      // Persist tool results via assistant.toolCalls + final summarized assistant message ONLY.
+      const assistantToolMsg: Message = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: '',
+        timestamp: Date.now(),
+        toolCalls: toolResults
+      };
       const finalMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: followUp, timestamp: Date.now() };
-      return { content: followUp, messages: [assistantToolMsg, toolMsg, finalMsg], toolCalls: toolResults };
+      return { content: followUp, messages: [assistantToolMsg, finalMsg], toolCalls: toolResults };
     }
     const simpleMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: fullContent, timestamp: Date.now() };
     return { content: fullContent, messages: [simpleMsg] };
@@ -85,26 +107,74 @@ export class ChatHandler {
     }
     const toolResults = await this.executeToolCalls(resp.tool_calls);
     const followUp = await this.generateToolResponse(message, history, resp.tool_calls, toolResults);
-    const assistantToolMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', timestamp: Date.now(), toolCalls: toolResults };
-    const toolMsg: Message = { id: crypto.randomUUID(), role: 'tool', content: JSON.stringify(toolResults.map(tr => tr.result)), timestamp: Date.now() };
+    // Persist tool results via assistant.toolCalls + final summarized assistant message ONLY.
+    const assistantToolMsg: Message = {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+      toolCalls: toolResults
+    };
     const finalMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: followUp, timestamp: Date.now() };
-    return { content: followUp, messages: [assistantToolMsg, toolMsg, finalMsg], toolCalls: toolResults };
+    return { content: followUp, messages: [assistantToolMsg, finalMsg], toolCalls: toolResults };
+  }
+  private safeParseToolArgs(raw: unknown, toolName: string): { ok: true; value: Record<string, unknown> } | { ok: false } {
+    if (typeof raw !== 'string' || raw.trim().length === 0) return { ok: true, value: {} };
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return { ok: true, value: parsed as Record<string, unknown> };
+      }
+      console.warn('[ChatHandler] Tool arguments JSON is not an object:', { toolName, raw });
+      return { ok: true, value: {} };
+    } catch (e) {
+      console.warn('[ChatHandler] Failed to parse tool arguments JSON:', { toolName, raw, error: String(e) });
+      return { ok: false };
+    }
   }
   private async executeToolCalls(openAiToolCalls: any[]): Promise<ToolCall[]> {
-    return Promise.all(openAiToolCalls.map(async (tc) => {
-      const args = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
-      const result = await executeTool(tc.function.name, args);
-      return { id: tc.id, name: tc.function.name, arguments: args, result };
-    }));
+    return Promise.all(
+      openAiToolCalls.map(async (tc: any, index: number) => {
+        const toolName = String(tc?.function?.name || '');
+        const id = String(tc?.id || `tool_${Date.now()}_${index}`);
+        const parsed = this.safeParseToolArgs(tc?.function?.arguments, toolName);
+        if (!parsed.ok) {
+          return {
+            id,
+            name: toolName,
+            arguments: {},
+            result: { error: 'Invalid tool arguments JSON' }
+          };
+        }
+        try {
+          const result = await executeTool(toolName, parsed.value);
+          return { id, name: toolName, arguments: parsed.value, result };
+        } catch (error) {
+          console.error('[ChatHandler] Tool execution crashed:', { toolName, error });
+          return {
+            id,
+            name: toolName,
+            arguments: parsed.value,
+            result: { error: 'Tool execution failed' }
+          };
+        }
+      })
+    );
   }
   private async generateToolResponse(userMsg: string, history: Message[], toolCalls: any[], results: ToolCall[]): Promise<string> {
+    // Do not replay historical tool-role messages back into the model. (They can contain invalid tool_call_id mappings.)
+    const recentHistory = history.filter((m) => m.role !== 'tool').slice(-5).map((m) => this.mapMessageToOpenAI(m));
     const messages: any[] = [
       { role: 'system', content: `Summarize the tool results efficiently. ${this.buildHandoffDirective()}` },
-      ...history.slice(-5).map(m => this.mapMessageToOpenAI(m)),
+      ...recentHistory,
       { role: 'assistant', content: null, tool_calls: toolCalls },
-      ...results.map(tr => ({ role: 'tool', content: JSON.stringify(tr.result), tool_call_id: tr.id }))
+      ...results.map((tr) => ({ role: 'tool', content: JSON.stringify(tr.result), tool_call_id: tr.id }))
     ];
-    const followUp = await this.client.chat.completions.create({ model: this.model, messages, max_tokens: 4000 });
+    const followUp = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      max_tokens: 4000
+    });
     return followUp.choices[0]?.message?.content || 'Task completed.';
   }
   private buildHandoffDirective(): string {
@@ -113,25 +183,26 @@ export class ChatHandler {
   }
   private buildConversationMessages(userMsg: string, history: Message[]): any[] {
     const identity = `${this.agentName} ${this.agentAvatar}\nSoul: ${this.systemPrompt}\n${this.buildHandoffDirective()}`;
-    return [
-      { role: 'system', content: identity },
-      ...history.slice(-10).map(m => this.mapMessageToOpenAI(m)),
-      { role: 'user', content: userMsg }
-    ];
+    // Exclude historical tool-role messages from being sent back to the model.
+    const recentHistory = history.filter((m) => m.role !== 'tool').slice(-10).map((m) => this.mapMessageToOpenAI(m));
+    return [{ role: 'system', content: identity }, ...recentHistory, { role: 'user', content: userMsg }];
   }
   private mapMessageToOpenAI(m: Message): any {
-    if (m.role === 'tool') return { role: 'tool', content: m.content || '{}', tool_call_id: m.id };
-    const base: any = { role: m.role, content: m.content };
-    if (m.toolCalls) {
-      base.tool_calls = m.toolCalls.map(tc => ({ 
-        id: tc.id, 
-        type: 'function', 
-        function: { name: tc.name, arguments: JSON.stringify(tc.arguments) } 
-      }));
+    // Important: persisted toolCalls are for UI only; do not replay them as OpenAI tool_calls.
+    if (m.role === 'tool') {
+      return { role: 'tool', content: m.content || '{}', tool_call_id: m.id };
     }
-    return base;
+    return { role: m.role, content: m.content };
   }
-  updateModel(newModel: string): void { this.model = newModel; }
-  updatePersona(soul: string, name: string, avatar: string): void { this.systemPrompt = soul; this.agentName = name; this.agentAvatar = avatar; }
-  updateCrew(names: string[]): void { this.activeCrew = names; }
+  updateModel(newModel: string): void {
+    this.model = newModel;
+  }
+  updatePersona(soul: string, name: string, avatar: string): void {
+    this.systemPrompt = soul;
+    this.agentName = name;
+    this.agentAvatar = avatar;
+  }
+  updateCrew(names: string[]): void {
+    this.activeCrew = names;
+  }
 }

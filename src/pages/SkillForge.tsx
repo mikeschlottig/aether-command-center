@@ -1,5 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Terminal, Code2, Rocket, Info, FileCode, Plus, Trash2, CheckCircle2, Cpu, Globe, Database, Play, AlertTriangle } from 'lucide-react';
+import {
+  Terminal,
+  Code2,
+  Rocket,
+  Info,
+  FileCode,
+  Plus,
+  Trash2,
+  CheckCircle2,
+  Cpu,
+  Globe,
+  Database,
+  Play,
+  AlertTriangle
+} from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { PageHeader } from '@/components/illustrative/PageHeader';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -10,29 +24,54 @@ import { useAgentStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { WranglerConsole, LogEntry } from '@/components/illustrative/WranglerConsole';
+type MonacoErrorBoundaryProps = {
+  children: React.ReactNode;
+  onError?: (error: unknown) => void;
+};
+type MonacoErrorBoundaryState = {
+  hasError: boolean;
+};
+class MonacoErrorBoundary extends React.PureComponent<MonacoErrorBoundaryProps, MonacoErrorBoundaryState> {
+  state: MonacoErrorBoundaryState = { hasError: false };
+  static getDerivedStateFromError(): MonacoErrorBoundaryState {
+    return { hasError: true };
+  }
+  componentDidCatch(error: unknown) {
+    console.error('[SkillForge] Monaco editor crashed:', error);
+    this.props.onError?.(error);
+  }
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
 export function SkillForge() {
-  const skills = useAgentStore(s => s.skills);
-  const saveSkill = useAgentStore(s => s.saveSkill);
-  const deleteSkill = useAgentStore(s => s.deleteSkill);
+  const skills = useAgentStore((s) => s.skills);
+  const saveSkill = useAgentStore((s) => s.saveSkill);
+  const deleteSkill = useAgentStore((s) => s.deleteSkill);
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const [isDeploying, setIsDeploying] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [editorError, setEditorError] = useState(false);
-  const activeSkill = skills.find(s => s.id === activeSkillId);
+  const activeSkill = skills.find((s) => s.id === activeSkillId);
+  useEffect(() => {
+    // Allow Monaco to recover per-skill selection
+    setEditorError(false);
+  }, [activeSkillId]);
   useEffect(() => {
     if (activeSkill) {
       setCode(activeSkill.code);
     }
-  }, [activeSkillId, activeSkill]);
+  }, [activeSkill]);
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
-    setLogs(prev => [...prev, { id: Date.now().toString(), message, type, timestamp: Date.now() }]);
+    setLogs((prev) => [...prev, { id: Date.now().toString(), message, type, timestamp: Date.now() }]);
   };
   const handleSave = () => {
     if (!activeSkillId || !activeSkill) return;
     saveSkill({ ...activeSkill, code });
     addLog(`Saved ${activeSkill.name} to local drafting space.`, 'info');
-    toast.success("Script Saved Locally");
+    toast.success('Script Saved Locally');
   };
   const handleDeploy = () => {
     if (!activeSkill) return;
@@ -46,8 +85,8 @@ export function SkillForge() {
         handleSave();
         addLog(`Successfully manifested ${activeSkill.name} at the edge!`, 'success');
         addLog(`Worker accessible at https://${activeSkill.name.split('.')[0]}.aether.workers.dev`, 'info');
-        toast.success("Skill Manifested on Edge", {
-          description: "Agents can now utilize this tool.",
+        toast.success('Skill Manifested on Edge', {
+          description: 'Agents can now utilize this tool.',
           icon: <CheckCircle2 className="text-green-500" />
         });
       }, 1500);
@@ -74,6 +113,7 @@ export function SkillForge() {
     };
     saveSkill(newSkill);
     setActiveSkillId(id);
+    setEditorError(false);
     addLog(`Initialized new workspace: ${newSkill.name}`, 'info');
   };
   return (
@@ -97,24 +137,32 @@ export function SkillForge() {
                   key={skill.id}
                   onClick={() => setActiveSkillId(skill.id)}
                   className={cn(
-                    "group flex items-center justify-between p-3 rounded-xl border-2 transition-all cursor-pointer",
+                    'group flex items-center justify-between p-3 rounded-xl border-2 transition-all cursor-pointer',
                     activeSkillId === skill.id
-                      ? "bg-primary/5 border-primary shadow-sm"
-                      : "bg-background border-transparent hover:bg-muted/50"
+                      ? 'bg-primary/5 border-primary shadow-sm'
+                      : 'bg-background border-transparent hover:bg-muted/50'
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <FileCode className={cn("h-4 w-4", activeSkillId === skill.id ? "text-primary" : "text-muted-foreground")} />
+                    <FileCode
+                      className={cn(
+                        'h-4 w-4',
+                        activeSkillId === skill.id ? 'text-primary' : 'text-muted-foreground'
+                      )}
+                    />
                     <span className="text-sm font-medium">{skill.name}</span>
                   </div>
                   <Button
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive"
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      deleteSkill(skill.id); 
-                      if (activeSkillId === skill.id) setActiveSkillId(null); 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteSkill(skill.id);
+                      if (activeSkillId === skill.id) {
+                        setActiveSkillId(null);
+                        setEditorError(false);
+                      }
                     }}
                   >
                     <Trash2 className="h-3 w-3" />
@@ -133,10 +181,13 @@ export function SkillForge() {
                 { label: 'D1_STORE', icon: Database, color: 'text-orange-500' },
                 { label: 'KV_CACHE', icon: Globe, color: 'text-blue-500' },
                 { label: 'AI_GATEWAY', icon: Rocket, color: 'text-purple-500' }
-              ].map(binding => (
-                <div key={binding.label} className="flex items-center justify-between p-2 rounded-lg bg-background/50 border">
+              ].map((binding) => (
+                <div
+                  key={binding.label}
+                  className="flex items-center justify-between p-2 rounded-lg bg-background/50 border"
+                >
                   <div className="flex items-center gap-2">
-                    <binding.icon className={cn("h-3 w-3", binding.color)} />
+                    <binding.icon className={cn('h-3 w-3', binding.color)} />
                     <span>{binding.label}</span>
                   </div>
                   <div className="h-2 w-2 rounded-full bg-green-500" />
@@ -171,35 +222,45 @@ export function SkillForge() {
                   <AlertTriangle className="h-12 w-12 text-orange-500" />
                   <div>
                     <h4 className="font-serif font-bold text-lg">Forge Malfunction</h4>
-                    <p className="text-sm text-muted-foreground">The advanced editor failed to manifest. Reverting to basic inscription tool.</p>
+                    <p className="text-sm text-muted-foreground">
+                      The advanced editor failed to manifest. Reverting to basic inscription tool.
+                    </p>
                   </div>
-                  <Textarea 
-                    value={code} 
+                  <Textarea
+                    value={code}
                     onChange={(e) => setCode(e.target.value)}
                     className="flex-1 font-mono text-xs h-full w-full"
                   />
                 </div>
               ) : (
-                <Editor
-                  height="100%"
-                  defaultLanguage="typescript"
-                  theme="vs-light"
-                  value={code}
-                  onChange={(val) => setCode(val || '')}
-                  onMount={() => setEditorError(false)}
+                <MonacoErrorBoundary
+                  key={activeSkillId || 'no-skill'}
                   onError={() => setEditorError(true)}
-                  loading={<div className="h-full w-full flex items-center justify-center italic text-muted-foreground">Awakening the Forge...</div>}
-                  options={{
-                    minimap: { enabled: false },
-                    fontSize: 14,
-                    padding: { top: 20 },
-                    scrollBeyondLastLine: false,
-                    automaticLayout: true,
-                    lineNumbers: 'on',
-                    roundedSelection: true,
-                    scrollbar: { vertical: 'hidden' }
-                  }}
-                />
+                >
+                  <Editor
+                    height="100%"
+                    defaultLanguage="typescript"
+                    theme="vs-light"
+                    value={code}
+                    onChange={(val) => setCode(val || '')}
+                    onMount={() => setEditorError(false)}
+                    loading={
+                      <div className="h-full w-full flex items-center justify-center italic text-muted-foreground">
+                        Awakening the Forge...
+                      </div>
+                    }
+                    options={{
+                      minimap: { enabled: false },
+                      fontSize: 14,
+                      padding: { top: 20 },
+                      scrollBeyondLastLine: false,
+                      automaticLayout: true,
+                      lineNumbers: 'on',
+                      roundedSelection: true,
+                      scrollbar: { vertical: 'hidden' }
+                    }}
+                  />
+                </MonacoErrorBoundary>
               )}
             </div>
           </Card>
@@ -209,14 +270,16 @@ export function SkillForge() {
               {activeSkill ? `Forge Sync: ${new Date(activeSkill.updatedAt).toLocaleTimeString()}` : 'Select a script'}
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" onClick={handleSave} className="rounded-xl">Save Local</Button>
+              <Button variant="outline" onClick={handleSave} className="rounded-xl">
+                Save Local
+              </Button>
               <Button
                 onClick={handleDeploy}
                 disabled={isDeploying || !activeSkillId}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg relative overflow-hidden"
               >
                 {isDeploying ? 'Manifesting...' : 'Deploy to Edge'}
-                <Rocket className={cn("h-4 w-4", isDeploying && "animate-bounce")} />
+                <Rocket className={cn('h-4 w-4', isDeploying && 'animate-bounce')} />
               </Button>
             </div>
           </div>
