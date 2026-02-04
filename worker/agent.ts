@@ -4,6 +4,7 @@ import type { ChatState, Message } from './types';
 import { ChatHandler } from './chat';
 import { API_RESPONSES } from './config';
 import { createMessage, createStreamResponse, createEncoder } from './utils';
+type MCPServerConfig = { name: string; sseUrl: string };
 export class ChatAgent extends Agent<Env, ChatState> {
   private chatHandler?: ChatHandler;
   initialState: ChatState = {
@@ -13,7 +14,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
     model: 'google-ai-studio/gemini-2.0-flash',
     systemPrompt: 'You are a helpful assistant.',
     agentName: 'Assistant',
-    agentAvatar: '🤖'
+    agentAvatar: '🤖',
   };
   async onStart(): Promise<void> {
     this.chatHandler = new ChatHandler(
@@ -43,48 +44,99 @@ export class ChatAgent extends Agent<Env, ChatState> {
   private handleGetMessages(): Response {
     return Response.json({ success: true, data: this.state });
   }
-  private async handleChatMessage(body: { message: string; model?: string; stream?: boolean; crewNames?: string[] }): Promise<Response> {
-    const { message, model, stream, crewNames } = body;
-    if (!message?.trim()) return Response.json({ success: false, error: API_RESPONSES.MISSING_MESSAGE }, { status: 400 });
+  private normalizeMcpServers(raw: unknown): MCPServerConfig[] {
+    const MAX_SERVERS = 6;
+    const MAX_NAME = 80;
+    const MAX_URL = 2048;
+    if (!Array.isArray(raw)) return [];
+    const out: MCPServerConfig[] = [];
+    const seen = new Set<string>();
+    for (const entry of raw.slice(0, MAX_SERVERS)) {
+      const name = typeof entry?.name === 'string' ? entry.name.trim() : '';
+      const sseUrl = typeof entry?.sseUrl === 'string' ? entry.sseUrl.trim() : '';
+      if (!name || !sseUrl) continue;
+      if (name.length > MAX_NAME || sseUrl.length > MAX_URL) continue;
+      let normalizedUrl = '';
+      try {
+        const url = new URL(sseUrl);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') continue;
+        normalizedUrl = url.toString();
+      } catch {
+        continue;
+      }
+      const key = `${name}|${normalizedUrl}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ name, sseUrl: normalizedUrl });
+    }
+    return out;
+  }
+  private async handleChatMessage(body: {
+    message: string;
+    model?: string;
+    stream?: boolean;
+    crewNames?: string[];
+    mcpServers?: MCPServerConfig[];
+  }): Promise<Response> {
+    const { message, model, stream, crewNames, mcpServers } = body;
+    if (!message?.trim()) {
+      return Response.json({ success: false, error: API_RESPONSES.MISSING_MESSAGE }, { status: 400 });
+    }
+    if (!this.chatHandler) {
+      console.error('[ChatAgent] Chat handler not initialized');
+      return Response.json({ success: false, error: API_RESPONSES.INTERNAL_ERROR }, { status: 500 });
+    }
     if (model && model !== this.state.model) {
       this.setState({ ...this.state, model });
-      this.chatHandler?.updateModel(model);
+      this.chatHandler.updateModel(model);
     }
-    if (crewNames) this.chatHandler?.updateCrew(crewNames);
+    if (crewNames) this.chatHandler.updateCrew(crewNames);
+    const normalizedMcp = this.normalizeMcpServers(mcpServers);
+    if (normalizedMcp.length > 0) {
+      try {
+        this.chatHandler.updateMcpServers(normalizedMcp);
+      } catch (e) {
+        console.warn('[ChatAgent] Failed to update MCP servers (non-fatal):', e);
+      }
+    } else {
+      // Allow clearing MCP servers by explicitly sending empty array
+      if (Array.isArray(mcpServers)) {
+        try {
+          this.chatHandler.updateMcpServers([]);
+        } catch (e) {
+          console.warn('[ChatAgent] Failed to clear MCP servers (non-fatal):', e);
+        }
+      }
+    }
     const userMessage = createMessage('user', message.trim());
     const updatedMessages = [...this.state.messages, userMessage];
     // Persist immediately before starting processing
     this.setState({ ...this.state, messages: updatedMessages, isProcessing: true });
     try {
-      if (!this.chatHandler) throw new Error('Chat handler not initialized');
       if (stream) {
         const { readable, writable } = new TransformStream();
         const writer = writable.getWriter();
         const encoder = createEncoder();
         (async () => {
-          let streamingText = '';
           try {
-            // Streaming state is transient, don't write to storage on every chunk
             const response = await this.chatHandler!.processMessage(message, updatedMessages, (chunk: string) => {
-              streamingText += chunk;
               writer.write(encoder.encode(chunk));
             });
-            // Persist ONLY once at the end of streaming
             const finalMessages = [...updatedMessages, ...response.messages];
-            this.setState({ 
-              ...this.state, 
-              messages: finalMessages, 
+            this.setState({
+              ...this.state,
+              messages: finalMessages,
               isProcessing: false,
-              streamingMessage: '' // Clear transient state
+              streamingMessage: '',
             });
           } catch (error) {
             console.error('Stream processing error:', error);
             const err = 'An error occurred during transmission.';
             writer.write(encoder.encode(err));
-            this.setState({ 
-              ...this.state, 
-              messages: [...updatedMessages, createMessage('assistant', err)], 
-              isProcessing: false 
+            this.setState({
+              ...this.state,
+              messages: [...updatedMessages, createMessage('assistant', err)],
+              isProcessing: false,
             });
           } finally {
             writer.close();

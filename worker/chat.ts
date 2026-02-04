@@ -1,6 +1,8 @@
 import OpenAI from 'openai';
 import type { Message, ToolCall } from './types';
 import { getToolDefinitions, executeTool } from './tools';
+import { mcpManager } from './mcp-client';
+type MCPServerConfig = { name: string; sseUrl: string };
 export class ChatHandler {
   private client: OpenAI;
   private model: string;
@@ -8,6 +10,7 @@ export class ChatHandler {
   private agentName: string;
   private agentAvatar: string;
   private activeCrew: string[];
+  private mcpServers: MCPServerConfig[];
   constructor(
     aiGatewayUrl: string,
     apiKey: string,
@@ -22,12 +25,29 @@ export class ChatHandler {
     this.agentName = agentName || 'Assistant';
     this.agentAvatar = agentAvatar || '🤖';
     this.activeCrew = [];
+    this.mcpServers = [];
+  }
+  updateMcpServers(servers: MCPServerConfig[]): void {
+    this.mcpServers = Array.isArray(servers) ? servers : [];
+    try {
+      mcpManager.setServers(this.mcpServers);
+    } catch (e) {
+      console.warn('[ChatHandler] MCP setServers failed (non-fatal):', e);
+    }
+  }
+  private ensureMcpConfigured(): void {
+    try {
+      mcpManager.setServers(this.mcpServers);
+    } catch (e) {
+      console.warn('[ChatHandler] MCP ensure config failed (non-fatal):', e);
+    }
   }
   async processMessage(
     message: string,
     conversationHistory: Message[],
     onChunk?: (chunk: string) => void
   ): Promise<{ content: string; messages: Message[]; toolCalls?: ToolCall[] }> {
+    this.ensureMcpConfigured();
     const messages = this.buildConversationMessages(message, conversationHistory);
     const toolDefinitions = await getToolDefinitions();
     if (onChunk) {
@@ -47,7 +67,7 @@ export class ChatHandler {
       tools: toolDefinitions,
       tool_choice: 'auto',
       max_tokens: 16000,
-      stream: false
+      stream: false,
     });
     return this.handleNonStreamResponse(completion, message, conversationHistory);
   }
@@ -72,7 +92,7 @@ export class ChatHandler {
             accToolCalls[i] = {
               id: dtc.id || `tool_${Date.now()}_${i}`,
               type: 'function',
-              function: { name: dtc.function?.name || '', arguments: dtc.function?.arguments || '' }
+              function: { name: dtc.function?.name || '', arguments: dtc.function?.arguments || '' },
             };
           } else {
             if (dtc.function?.name) accToolCalls[i].function.name += dtc.function.name;
@@ -90,7 +110,7 @@ export class ChatHandler {
         role: 'assistant',
         content: '',
         timestamp: Date.now(),
-        toolCalls: toolResults
+        toolCalls: toolResults,
       };
       const finalMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: followUp, timestamp: Date.now() };
       return { content: followUp, messages: [assistantToolMsg, finalMsg], toolCalls: toolResults };
@@ -113,7 +133,7 @@ export class ChatHandler {
       role: 'assistant',
       content: '',
       timestamp: Date.now(),
-      toolCalls: toolResults
+      toolCalls: toolResults,
     };
     const finalMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: followUp, timestamp: Date.now() };
     return { content: followUp, messages: [assistantToolMsg, finalMsg], toolCalls: toolResults };
@@ -133,47 +153,42 @@ export class ChatHandler {
     }
   }
   private async executeToolCalls(openAiToolCalls: any[]): Promise<ToolCall[]> {
+    // Ensure MCP servers are configured before any dynamic tool execution.
+    this.ensureMcpConfigured();
     return Promise.all(
       openAiToolCalls.map(async (tc: any, index: number) => {
         const toolName = String(tc?.function?.name || '');
         const id = String(tc?.id || `tool_${Date.now()}_${index}`);
         const parsed = this.safeParseToolArgs(tc?.function?.arguments, toolName);
         if (!parsed.ok) {
-          return {
-            id,
-            name: toolName,
-            arguments: {},
-            result: { error: 'Invalid tool arguments JSON' }
-          };
+          return { id, name: toolName, arguments: {}, result: { error: 'Invalid tool arguments JSON' } };
         }
         try {
           const result = await executeTool(toolName, parsed.value);
           return { id, name: toolName, arguments: parsed.value, result };
         } catch (error) {
           console.error('[ChatHandler] Tool execution crashed:', { toolName, error });
-          return {
-            id,
-            name: toolName,
-            arguments: parsed.value,
-            result: { error: 'Tool execution failed' }
-          };
+          return { id, name: toolName, arguments: parsed.value, result: { error: 'Tool execution failed' } };
         }
       })
     );
   }
   private async generateToolResponse(userMsg: string, history: Message[], toolCalls: any[], results: ToolCall[]): Promise<string> {
     // Do not replay historical tool-role messages back into the model. (They can contain invalid tool_call_id mappings.)
-    const recentHistory = history.filter((m) => m.role !== 'tool').slice(-5).map((m) => this.mapMessageToOpenAI(m));
+    const recentHistory = history
+      .filter((m) => m.role !== 'tool')
+      .slice(-5)
+      .map((m) => this.mapMessageToOpenAI(m));
     const messages: any[] = [
       { role: 'system', content: `Summarize the tool results efficiently. ${this.buildHandoffDirective()}` },
       ...recentHistory,
       { role: 'assistant', content: null, tool_calls: toolCalls },
-      ...results.map((tr) => ({ role: 'tool', content: JSON.stringify(tr.result), tool_call_id: tr.id }))
+      ...results.map((tr) => ({ role: 'tool', content: JSON.stringify(tr.result), tool_call_id: tr.id })),
     ];
     const followUp = await this.client.chat.completions.create({
       model: this.model,
       messages,
-      max_tokens: 4000
+      max_tokens: 4000,
     });
     return followUp.choices[0]?.message?.content || 'Task completed.';
   }
@@ -184,7 +199,10 @@ export class ChatHandler {
   private buildConversationMessages(userMsg: string, history: Message[]): any[] {
     const identity = `${this.agentName} ${this.agentAvatar}\nSoul: ${this.systemPrompt}\n${this.buildHandoffDirective()}`;
     // Exclude historical tool-role messages from being sent back to the model.
-    const recentHistory = history.filter((m) => m.role !== 'tool').slice(-10).map((m) => this.mapMessageToOpenAI(m));
+    const recentHistory = history
+      .filter((m) => m.role !== 'tool')
+      .slice(-10)
+      .map((m) => this.mapMessageToOpenAI(m));
     return [{ role: 'system', content: identity }, ...recentHistory, { role: 'user', content: userMsg }];
   }
   private mapMessageToOpenAI(m: Message): any {

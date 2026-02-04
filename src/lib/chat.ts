@@ -4,6 +4,7 @@ export interface ChatResponse {
   data?: ChatState;
   error?: string;
 }
+export type MCPServerConfig = { name: string; sseUrl: string };
 export const MODELS = [
   { id: 'google-ai-studio/gemini-2.0-flash', name: 'Gemini 2.0 Flash (Fastest)' },
   { id: 'google-ai-studio/gemini-2.0-pro-exp-02-05', name: 'Gemini 2.0 Pro (Intelligence)' },
@@ -16,12 +17,18 @@ class ChatService {
     this.sessionId = crypto.randomUUID();
     this.baseUrl = `/api/chat/${this.sessionId}`;
   }
-  async sendMessage(message: string, model?: string, onChunk?: (chunk: string) => void, crewNames?: string[]): Promise<ChatResponse> {
+  async sendMessage(
+    message: string,
+    model?: string,
+    onChunk?: (chunk: string) => void,
+    crewNames?: string[],
+    mcpServers?: MCPServerConfig[]
+  ): Promise<ChatResponse> {
     try {
       const response = await fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, model, stream: !!onChunk, crewNames }),
+        body: JSON.stringify({ message, model, stream: !!onChunk, crewNames, mcpServers }),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       if (onChunk && response.body) {
@@ -62,15 +69,23 @@ class ChatService {
       return { success: false, error: 'Failed to purge memory' };
     }
   }
-  getSessionId(): string { return this.sessionId; }
-  newSession(): void { this.sessionId = crypto.randomUUID(); this.baseUrl = `/api/chat/${this.sessionId}`; }
-  switchSession(sessionId: string): void { this.sessionId = sessionId; this.baseUrl = `/api/chat/${sessionId}`; }
+  getSessionId(): string {
+    return this.sessionId;
+  }
+  newSession(): void {
+    this.sessionId = crypto.randomUUID();
+    this.baseUrl = `/api/chat/${this.sessionId}`;
+  }
+  switchSession(sessionId: string): void {
+    this.sessionId = sessionId;
+    this.baseUrl = `/api/chat/${sessionId}`;
+  }
   async createSession(title?: string, sessionId?: string, firstMessage?: string): Promise<any> {
     try {
       const response = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, sessionId, firstMessage })
+        body: JSON.stringify({ title, sessionId, firstMessage }),
       });
       return await response.json();
     } catch (error) {
@@ -90,7 +105,7 @@ class ChatService {
       const response = await fetch(`${this.baseUrl}/persona`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, avatar, systemPrompt })
+        body: JSON.stringify({ name, avatar, systemPrompt }),
       });
       return await response.json();
     } catch (error) {
