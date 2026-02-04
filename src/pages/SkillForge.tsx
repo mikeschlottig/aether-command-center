@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Terminal,
   Code2,
@@ -54,6 +54,18 @@ export function SkillForge() {
   const [isDeploying, setIsDeploying] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [editorError, setEditorError] = useState(false);
+  const idCounterRef = useRef(0);
+  const createUniqueId = useCallback((prefix: string) => {
+    const maybeUuid =
+      typeof globalThis !== 'undefined' &&
+      typeof globalThis.crypto !== 'undefined' &&
+      typeof globalThis.crypto.randomUUID === 'function'
+        ? globalThis.crypto.randomUUID()
+        : null;
+    if (maybeUuid) return `${prefix}-${maybeUuid}`;
+    idCounterRef.current += 1;
+    return `${prefix}-${Date.now()}-${idCounterRef.current}`;
+  }, []);
   const activeSkill = skills.find((s) => s.id === activeSkillId);
   useEffect(() => {
     // Allow Monaco to recover per-skill selection
@@ -64,9 +76,15 @@ export function SkillForge() {
       setCode(activeSkill.code);
     }
   }, [activeSkill]);
-  const addLog = (message: string, type: LogEntry['type'] = 'info') => {
-    setLogs((prev) => [...prev, { id: Date.now().toString(), message, type, timestamp: Date.now() }]);
-  };
+  const addLog = useCallback(
+    (message: string, type: LogEntry['type'] = 'info') => {
+      setLogs((prev) => [
+        ...prev,
+        { id: createUniqueId('log'), message, type, timestamp: Date.now() }
+      ]);
+    },
+    [createUniqueId]
+  );
   const handleSave = () => {
     if (!activeSkillId || !activeSkill) return;
     saveSkill({ ...activeSkill, code });
@@ -101,7 +119,7 @@ export function SkillForge() {
     }, 800);
   };
   const createNewSkill = () => {
-    const id = `skill-${Date.now()}`;
+    const id = createUniqueId('skill');
     const newSkill = {
       id,
       name: `skill-${skills.length + 1}.ts`,
@@ -233,10 +251,7 @@ export function SkillForge() {
                   />
                 </div>
               ) : (
-                <MonacoErrorBoundary
-                  key={activeSkillId || 'no-skill'}
-                  onError={() => setEditorError(true)}
-                >
+                <MonacoErrorBoundary key={activeSkillId || 'no-skill'} onError={() => setEditorError(true)}>
                   <Editor
                     height="100%"
                     defaultLanguage="typescript"
