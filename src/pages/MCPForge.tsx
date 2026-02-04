@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Plus, Network, Info, Trash2, Link2Off, Link2, ArrowRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Plus, Network, Info, Trash2, Link2Off, Link2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/illustrative/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -71,7 +70,7 @@ export function MCPForge(): JSX.Element {
       createdAt: Date.now(),
     });
     addLog(`Drafted MCP server "${cleanName}" (${validated.url.toString()}).`, 'success');
-    addLog(`Enabled drafts are sent with Command Deck requests (best-effort).`, 'info');
+    addLog(`Status: enabled (draft). Backend activation requires worker configuration changes.`, 'info');
     setName('');
     setSseUrl('');
   }, [addLog, addMcpServer, createUniqueId, name, sseUrl, validateUrl]);
@@ -91,19 +90,11 @@ export function MCPForge(): JSX.Element {
   );
   return (
     <AppLayout container>
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <PageHeader
-          title="MCP Forge"
-          description="Draft MCP server connections locally. Enabled drafts are sent with Command Deck requests, and the Worker will attempt to connect at runtime (best-effort)."
-        />
-        <Link to="/deck" className="shrink-0">
-          <Button className="rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg h-12 px-6 gap-2">
-            Go to Command Deck
-            <ArrowRight className="h-5 w-5" />
-          </Button>
-        </Link>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mt-10">
+      <PageHeader
+        title="MCP Forge"
+        description="Draft MCP server connections locally with progressive disclosure. These settings are persisted client-side and do not modify server behavior in Phase 10."
+      />
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         <Card className="lg:col-span-2 card-illustrative border-primary/10 bg-background">
           <CardHeader className="space-y-2">
             <CardTitle className="font-serif flex items-center gap-2">
@@ -111,7 +102,7 @@ export function MCPForge(): JSX.Element {
               Add MCP Server
             </CardTitle>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Provide an SSE endpoint for an MCP server. These drafts are persisted locally and included with Command Deck chat requests.
+              Provide an SSE endpoint for an MCP server. This creates a local draft record only.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -159,15 +150,9 @@ export function MCPForge(): JSX.Element {
                   Important Disclaimer
                 </CardTitle>
               </CardHeader>
-              <CardContent className="text-sm text-muted-foreground leading-relaxed space-y-2">
-                <p>
-                  Enabled drafts are <span className="font-bold">sent with your Command Deck messages</span>. The Worker will attempt to connect
-                  to these servers at runtime to discover tools.
-                </p>
-                <p>
-                  Availability depends on reachability and server correctness. If a server is offline, chat still works—remote tools will simply
-                  fail gracefully.
-                </p>
+              <CardContent className="text-sm text-muted-foreground leading-relaxed">
+                This page manages <span className="font-bold">client-side drafts</span> only. Actual MCP tools available
+                to the Worker runtime are determined server-side (and would require deployment configuration changes).
               </CardContent>
             </Card>
           </CardContent>
@@ -180,7 +165,7 @@ export function MCPForge(): JSX.Element {
                 Draft Servers
               </CardTitle>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Toggle drafts on/off, then test immediately in the Command Deck.
+                Enable/disable drafts for planning. No live connections are established from the browser.
               </p>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -189,31 +174,39 @@ export function MCPForge(): JSX.Element {
                   <div className="mx-auto h-14 w-14 rounded-2xl bg-primary/5 border-2 border-dashed border-primary/20 flex items-center justify-center text-primary">
                     <Link2Off className="h-6 w-6" />
                   </div>
-                  <div className="text-sm text-muted-foreground">No MCP drafts yet. Add one to start mapping your MCP Nexus.</div>
+                  <div className="text-sm text-muted-foreground">
+                    No MCP drafts yet. Add one to start mapping your MCP Nexus.
+                  </div>
                 </div>
               ) : (
                 mcpServers.map((s) => (
                   <div
                     key={s.id}
                     className={cn(
-                      'rounded-2xl border-2 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 transition-colors',
-                      s.enabled ? 'bg-emerald-50/40 border-emerald-100' : 'bg-muted/30 border-primary/10'
+                      "rounded-2xl border-2 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 transition-colors",
+                      s.enabled ? "bg-emerald-50/40 border-emerald-100" : "bg-muted/30 border-primary/10"
                     )}
                   >
                     <div className="min-w-0">
                       <div className="font-bold flex items-center gap-2 min-w-0">
-                        <Link2 className={cn('h-4 w-4', s.enabled ? 'text-emerald-600' : 'text-muted-foreground')} />
+                        <Link2 className={cn("h-4 w-4", s.enabled ? "text-emerald-600" : "text-muted-foreground")} />
                         <span className="truncate">{s.name}</span>
                       </div>
                       <div className="text-xs text-muted-foreground font-mono break-all mt-1">{s.sseUrl}</div>
-                      <div className="text-2xs text-muted-foreground mt-1">Created {new Date(s.createdAt).toLocaleString()}</div>
+                      <div className="text-2xs text-muted-foreground mt-1">
+                        Created {new Date(s.createdAt).toLocaleString()}
+                      </div>
                     </div>
                     <div className="flex items-center gap-3 justify-end shrink-0">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                           {s.enabled ? 'Enabled' : 'Disabled'}
                         </span>
-                        <Switch checked={s.enabled} onCheckedChange={(checked) => handleToggle(s.id, checked)} aria-label={`Toggle ${s.name}`} />
+                        <Switch
+                          checked={s.enabled}
+                          onCheckedChange={(checked) => handleToggle(s.id, checked)}
+                          aria-label={`Toggle ${s.name}`}
+                        />
                       </div>
                       <Button
                         variant="outline"

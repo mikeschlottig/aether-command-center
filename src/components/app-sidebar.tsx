@@ -1,6 +1,16 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Home, Palette, Terminal, MessageSquare, Settings, Sparkles } from "lucide-react";
+import {
+  Home,
+  Palette,
+  Terminal,
+  MessageSquare,
+  Sparkles,
+  Wrench,
+  Network,
+  ClipboardList,
+  GraduationCap,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -9,7 +19,6 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
-  SidebarMenuButton,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
@@ -18,6 +27,10 @@ const NAV_ITEMS = [
   { name: "Agent Atelier", icon: Palette, path: "/atelier" },
   { name: "Command Deck", icon: MessageSquare, path: "/deck" },
   { name: "Skill Forge", icon: Terminal, path: "/forge" },
+  { name: "Tool Forge", icon: Wrench, path: "/tool-forge" },
+  { name: "MCP Forge", icon: Network, path: "/mcp-forge" },
+  { name: "Agent Job Board", icon: ClipboardList, path: "/job-board" },
+  { name: "Learning Center", icon: GraduationCap, path: "/learning-center" },
 ];
 export function AppSidebar(): JSX.Element {
   const location = useLocation();
@@ -30,7 +43,9 @@ export function AppSidebar(): JSX.Element {
           </div>
           <div>
             <span className="block text-lg font-serif font-bold leading-none">Aether</span>
-            <span className="text-2xs text-muted-foreground font-medium uppercase tracking-widest">Command</span>
+            <span className="text-2xs text-muted-foreground font-medium uppercase tracking-widest">
+              Command
+            </span>
           </div>
         </div>
       </SidebarHeader>
@@ -42,7 +57,7 @@ export function AppSidebar(): JSX.Element {
                 <Link
                   to={item.path}
                   className={cn(
-                    buttonVariants({ variant: 'ghost' }),
+                    buttonVariants({ variant: "ghost" }),
                     "h-11 px-4 gap-2 items-center justify-start font-medium rounded-md transition-all duration-200 flex shrink-0",
                     location.pathname === item.path
                       ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-md translate-x-1 [&>svg]:text-primary-foreground"
