@@ -31,7 +31,9 @@ export function CommandDeck() {
     return personas.find((p) => p.id === activeId) || personas[0];
   }, [activeId, personas]);
   const enabledMcpServers = useMemo(() => {
-    const enabled = (mcpServers || []).filter((s) => !!s?.enabled && typeof s?.name === 'string' && typeof s?.sseUrl === 'string');
+    const enabled = (mcpServers || []).filter(
+      (s) => !!s?.enabled && typeof s?.name === 'string' && typeof s?.sseUrl === 'string'
+    );
     return enabled.map((s) => ({ name: s.name, sseUrl: s.sseUrl }));
   }, [mcpServers]);
   const enabledMcpNames = useMemo(() => enabledMcpServers.map((s) => s.name), [enabledMcpServers]);
@@ -54,8 +56,7 @@ export function CommandDeck() {
       }
     };
     syncSession();
-    // Intentionally keyed on activePersona fields to avoid extra fetches when unrelated persona props change.
-  }, [activePersona?.avatar, activePersona?.name, activePersona?.systemPrompt]);
+  }, [activePersona]);
   useEffect(() => {
     scrollToBottom();
   }, [messages, streamingMessage, scrollToBottom]);
@@ -145,9 +146,7 @@ export function CommandDeck() {
                               : 'bg-muted/60 text-muted-foreground border-border'
                           )}
                           role="status"
-                          aria-label={
-                            enabledMcpServers.length > 0 ? `MCP enabled: ${enabledMcpServers.length}` : 'MCP disabled'
-                          }
+                          aria-label={enabledMcpServers.length > 0 ? `MCP enabled: ${enabledMcpServers.length}` : 'MCP disabled'}
                         >
                           <Network className="h-3 w-3" />
                           {enabledMcpServers.length > 0 ? `MCP: ${enabledMcpServers.length} Active` : 'MCP: Off'}
